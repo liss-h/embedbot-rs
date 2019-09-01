@@ -1,11 +1,14 @@
 #![feature(try_trait, bind_by_move_pattern_guards)]
 
+extern crate serenity;
+
+use serenity::builder::{CreateEmbed, CreateMessage};
+use serenity::model::channel::Message;
+use serenity::model::gateway::Ready;
+use serenity::prelude::*;
+
 mod post_grab_api;
 use post_grab_api::*;
-
-use discord::model::{Event, Message};
-use discord::{Discord, State};
-use std::io::Read;
 
 fn is_url(url: &str) -> bool {
     url.starts_with("http://") || url.starts_with("https://")
@@ -35,86 +38,73 @@ fn should_embed(post: &Post) -> bool {
 }
 
 fn send_embed_message(
-    dcord: &Discord,
     msg: &Message,
+    ctx: &Context,
     post: &Post,
-) -> Result<Message, discord::Error> {
+) -> Result<Message, serenity::Error> {
     match post.post_type {
-        PostType::Image => dcord.send_embed(msg.channel_id, "", |embed_builder| {
-            embed_builder
-                .title(&format!("'{}'", escape_title(&post.title)))
-                .description(&post.origin)
-                .author(|author_builder| author_builder.name(&msg.author.name))
-                .url(&msg.content)
-                .image(&post.embed_url)
-        }),
-        PostType::Video => dcord.send_message(
-            msg.channel_id,
-            &format!(
-                ">>> Sender: **{}**\nSource: <{}>\nEmbedURL: {}\n\n**\"{}\"**",
-                msg.author.name,
-                msg.content,
-                post.embed_url,
-                escape_title(&post.title)
-            ),
-            "",
-            false,
-        ),
+        PostType::Image => msg
+            .channel_id
+            .send_message(&ctx.http, |m: &mut CreateMessage| {
+                m.embed(|e: &mut CreateEmbed| {
+                    e.title(&format!("'{}'", escape_title(&post.title)))
+                        .description(&post.origin)
+                        .author(|author_builder| author_builder.name(&msg.author.name))
+                        .url(&msg.content)
+                        .image(&post.embed_url)
+                })
+            }),
+        PostType::Video => msg
+            .channel_id
+            .send_message(&ctx.http, |m: &mut CreateMessage| {
+                m.content(&format!(
+                    ">>> Sender: **{}**\nSource: <{}>\nEmbedURL: {}\n\n**\"{}\"**",
+                    msg.author.name,
+                    msg.content,
+                    post.embed_url,
+                    escape_title(&post.title)
+                ))
+            }),
+    }
+}
+
+struct EmbedBot;
+
+impl EventHandler for EmbedBot {
+    fn message(&self, context: Context, msg: Message) {
+        if is_url(&msg.content) {
+            match choose_grab_api(&msg.content) {
+                Some(mut api) => match api.get_post(&msg.content) {
+                    Ok(post) if should_embed(&post) => {
+                        send_embed_message(&msg, &context, &post).expect("could not send msg");
+                        msg.delete(context.http).expect("could not delete msg");
+
+                        println!("[Info] embedded '{}' as {:?}", msg.content, post.post_type);
+                    }
+                    Ok(_) => println!(
+                        "[Info] ignoring '{}'. Reason: not supposed to embed",
+                        msg.content
+                    ),
+                    Err(e) => eprintln!("[Error] could not fetch post. Reason: {:?}", e),
+                },
+                None => println!(
+                    "[Info] ignoring '{}'. Reason: no api available",
+                    msg.content
+                ),
+            }
+        }
+    }
+
+    fn ready(&self, _ctx: Context, _ready: Ready) {
+        println!("[Info] logged in");
     }
 }
 
 fn main() {
-    let discord = {
-        let mut tokfile = std::fs::File::open("/etc/embedbot.conf").expect("could not open token file");
+    let tok = std::env::var("DISCORD_TOKEN").expect("ENVVAR 'DISCORD_TOKEN' not found");
+    let mut client = Client::new(&tok, EmbedBot).expect("could not create client");
 
-        let mut buf = String::new();
-        tokfile.read_to_string(&mut buf);
-
-        Discord::from_bot_token(&buf).expect("login failed")
-    };
-
-    let (mut connection, ready) = discord.connect().expect("connect failed");
-    let mut state = State::new(ready);
-
-    println!("[Info] logged in");
-
-    loop {
-        let event = match connection.recv_event() {
-            Ok(event) => event,
-            Err(discord::Error::Closed(code, body)) => {
-                println!("[Error] Connection closed with status {:?}: {}", code, body);
-                break;
-            }
-            _ => continue,
-        };
-
-        state.update(&event);
-
-        match event {
-            Event::MessageCreate(msg) if is_url(&msg.content) => {
-                match choose_grab_api(&msg.content) {
-                    Some(mut api) => match api.get_post(&msg.content) {
-                        Ok(post) => {
-                            if should_embed(&post) {
-                                send_embed_message(&discord, &msg, &post)
-                                    .expect("could not send msg");
-
-                                discord
-                                    .delete_message(msg.channel_id, msg.id)
-                                    .expect("could not delete msg");
-                            } else {
-                                println!(
-                                    "[Info] ignoring '{}'. Reason: not supposed to embed",
-                                    msg.content
-                                )
-                            }
-                        }
-                        Err(e) => eprintln!("[Error] could not revc post at: {:?}", e),
-                    },
-                    None => println!("[Info] ignoring '{}'. Reason: no API found", msg.content),
-                }
-            }
-            _ => (),
-        }
+    if let Err(e) = client.start() {
+        eprintln!("[Error] Client Err: {:?}", e);
     }
 }

@@ -26,7 +26,7 @@ impl From<serde_json::Error> for Error {
     }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum PostType {
     Image,
     Video,
