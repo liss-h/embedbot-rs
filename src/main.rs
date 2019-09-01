@@ -73,8 +73,7 @@ fn main() {
         Discord::from_bot_token(&buf).expect("login failed")
     };
 
-    let (mut connection, ready) = discord.connect().expect("connect failed");
-    let mut state = State::new(ready);
+    let (mut connection, _) = discord.connect().expect("connect failed");
 
     println!("[Info] logged in");
 
@@ -87,8 +86,6 @@ fn main() {
             }
             _ => continue,
         };
-
-        state.update(&event);
 
         match event {
             Event::MessageCreate(msg) if is_url(&msg.content) => {
