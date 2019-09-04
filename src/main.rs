@@ -68,13 +68,22 @@ fn send_embed_message(
     }
 }
 
+fn get_post(api: &mut dyn PostGrabAPI, url: &str) -> Result<Post, Error> {
+
+    match api.get_post(url) {
+        Ok(post) => Ok(post),
+        Err(_) if url.ends_with("#") => get_post(api, url.trim_end_matches("#")),
+        Err(e) => Err(e)
+    }
+}
+
 struct EmbedBot;
 
 impl EventHandler for EmbedBot {
     fn message(&self, context: Context, msg: Message) {
         if is_url(&msg.content) {
             match choose_grab_api(&msg.content) {
-                Some(mut api) => match api.get_post(&msg.content) {
+                Some(mut api) => match get_post(api.as_mut(), &msg.content) {
                     Ok(post) if should_embed(&post) => {
                         send_embed_message(&msg, &context, &post).expect("could not send msg");
                         msg.delete(context.http).expect("could not delete msg");
