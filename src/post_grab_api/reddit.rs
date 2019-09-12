@@ -33,7 +33,7 @@ impl PostGrabAPI for RedditAPI {
 
                     match imgur.get_post(&tmp) {
                         Ok(post) => post.embed_url,
-                        Err(e) => tmp
+                        Err(_) => tmp
                     }
                 }
             } else {
