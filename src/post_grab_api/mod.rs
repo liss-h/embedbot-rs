@@ -1,5 +1,8 @@
 pub mod ninegag;
 pub mod reddit;
+pub mod imgur;
+
+pub const USER_AGENT: &str = "embedbot v0.1";
 
 #[derive(Debug)]
 pub enum Error {
@@ -30,6 +33,7 @@ impl From<serde_json::Error> for Error {
 pub enum PostType {
     Image,
     Video,
+    Text,
 }
 
 pub struct Post {
@@ -38,8 +42,28 @@ pub struct Post {
     pub embed_url: String,
     pub origin: String,
     pub post_type: PostType,
+    pub text: String
 }
 
 pub trait PostGrabAPI {
     fn get_post(&mut self, url: &str) -> Result<Post, Error>;
+}
+
+pub fn wget(url: &str, user_agent: &str) -> Result<reqwest::Response, Error> {
+    let client = reqwest::Client::new();
+    client
+        .get(&format!("{}/.json", url))
+        .header("User-Agent", user_agent)
+        .send()
+        .map_err(|e| e.into())
+}
+
+pub fn wget_html(url: &str, user_agent: &str) -> Result<scraper::Html, Error> {
+    let mut resp = wget(url, user_agent)?;
+    Ok(scraper::Html::parse_document(&resp.text()?))
+}
+
+pub fn wget_json(url: &str, user_agent: &str) -> Result<serde_json::Value, Error> {
+    let mut resp = wget(url, user_agent)?;
+    resp.json().map_err(|e| e.into())
 }

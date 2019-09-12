@@ -1,20 +1,11 @@
 use super::*;
 
+#[derive(Default)]
 pub struct NineGagAPI;
-
-impl Default for NineGagAPI {
-    fn default() -> Self {
-        Self
-    }
-}
 
 impl PostGrabAPI for NineGagAPI {
     fn get_post(&mut self, url: &str) -> Result<Post, Error> {
-        let html = {
-            let mut resp = reqwest::get(url)?;
-            let text = resp.text()?;
-            scraper::Html::parse_document(&text)
-        };
+        let html = wget_html(url, USER_AGENT)?;
 
         let title: String = {
             let title_selector = scraper::Selector::parse("title").unwrap();
@@ -73,7 +64,8 @@ impl PostGrabAPI for NineGagAPI {
         Ok(Post {
             website: "9gag".to_string(),
             origin: "9gag".to_string(),
-            title,
+            text: "".to_string(),
+            title: title[0..(title.len() - 7)].to_string(), // remove ' - 9GAG' from end
             embed_url,
             post_type,
         })

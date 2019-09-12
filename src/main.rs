@@ -10,6 +10,10 @@ use serenity::prelude::*;
 mod post_grab_api;
 use post_grab_api::*;
 
+const EMBED_CONTENT_MAX_LEN: usize = 2048;
+const EMBED_TITLE_MAX_LEN: usize = 256;
+
+
 fn is_url(url: &str) -> bool {
     url.starts_with("http://") || url.starts_with("https://")
 }
@@ -19,12 +23,14 @@ fn choose_grab_api(url: &str) -> Option<Box<dyn post_grab_api::PostGrabAPI>> {
         Some(Box::new(post_grab_api::reddit::RedditAPI::default()))
     } else if url.starts_with("https://9gag.com") {
         Some(Box::new(post_grab_api::ninegag::NineGagAPI::default()))
+    } else if url.starts_with("https://imgur.com/") {
+        Some(Box::new(post_grab_api::imgur::ImgurAPI::default()))
     } else {
         None
     }
 }
 
-fn escape_title(title: &str) -> String {
+fn escape_markdown(title: &str) -> String {
     title
         .replace("*", "\\*")
         .replace("_", "\\_")
@@ -34,8 +40,35 @@ fn escape_title(title: &str) -> String {
 
 fn should_embed(post: &Post) -> bool {
     (&post.website == "9gag" && post.post_type == PostType::Video)
-        || (&post.website == "reddit" && post.post_type == PostType::Image)
+        || (&post.website == "reddit" && post.post_type != PostType::Video)
+        || &post.website == "imgur"
 }
+
+fn limit_len(text: &str, limit: usize) -> String {
+    const SHORTENED_MARKER: &str = " [...]";
+
+    if text.len() > limit {
+        format!("{}{}", &text[..(limit - SHORTENED_MARKER.len())], SHORTENED_MARKER)
+    } else {
+        text.to_string()
+    }
+}
+
+fn fmt_title(post: &Post) -> String {
+    let title = limit_len(
+        &escape_markdown(&post.title),
+        EMBED_TITLE_MAX_LEN - 9 - post.origin.len()); // -9 for formatting
+
+    format!("'{}' - **{}**", title, post.origin)
+}
+
+fn default_embed<'a>(msg: &Message, post: &Post, e: &'a mut CreateEmbed) -> &'a mut CreateEmbed {
+    e.title(&fmt_title(&post))
+        .description(&limit_len(&post.text, EMBED_CONTENT_MAX_LEN))
+        .author(|author_builder| author_builder.name(&msg.author.name))
+        .url(&msg.content)
+}
+
 
 fn send_embed_message(
     msg: &Message,
@@ -47,10 +80,7 @@ fn send_embed_message(
             .channel_id
             .send_message(&ctx.http, |m: &mut CreateMessage| {
                 m.embed(|e: &mut CreateEmbed| {
-                    e.title(&format!("'{}'", escape_title(&post.title)))
-                        .description(&post.origin)
-                        .author(|author_builder| author_builder.name(&msg.author.name))
-                        .url(&msg.content)
+                    default_embed(&msg, &post, e)
                         .image(&post.embed_url)
                 })
             }),
@@ -58,13 +88,19 @@ fn send_embed_message(
             .channel_id
             .send_message(&ctx.http, |m: &mut CreateMessage| {
                 m.content(&format!(
-                    ">>> Sender: **{}**\nSource: <{}>\nEmbedURL: {}\n\n**\"{}\"**",
-                    msg.author.name,
-                    msg.content,
-                    post.embed_url,
-                    escape_title(&post.title)
+                    ">>> **{author}**\nSource: <{src}>\nEmbedURL: {embed_url}\n\n{title}\n\n{text}",
+                    author = msg.author.name,
+                    src = msg.content,
+                    embed_url = post.embed_url,
+                    title = fmt_title(&post),
+                    text  = limit_len(&post.text, EMBED_CONTENT_MAX_LEN),
                 ))
             }),
+        PostType::Text => msg
+            .channel_id
+            .send_message(&ctx.http, |m: &mut CreateMessage| {
+                m.embed(|e: &mut CreateEmbed| default_embed(&msg, &post, e))
+            })
     }
 }
 
