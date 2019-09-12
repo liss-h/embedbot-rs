@@ -13,4 +13,4 @@ RUN cd /tmp/embedbot-rs && /root/.cargo/bin/cargo build --release
 RUN cp /tmp/embedbot-rs/target/release/embedbot-rs /usr/bin/
 RUN chmod +x /usr/bin/embedbot-rs
 
-CMD /usr/bin/embedbot-rs
+CMD ["/usr/bin/embedbot-rs"]
