@@ -25,7 +25,8 @@
 > define the environment variable DISCORD_TOKEN as your bot token  
 
 ## Docker install
-> $ docker build embedbot-rs
+> $ wget https://raw.githubusercontent.com/Clueliss/embedbot-rs/master/Dockerfile  
+> $ docker build .
 
 ## Manual build
 > $ cargo build --release
