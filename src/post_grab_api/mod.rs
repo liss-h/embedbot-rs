@@ -29,13 +29,14 @@ impl From<serde_json::Error> for Error {
     }
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum PostType {
     Image,
     Video,
     Text,
 }
 
+#[derive(Clone)]
 pub struct Post {
     pub website: String,
     pub title: String,
