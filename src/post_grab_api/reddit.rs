@@ -21,8 +21,12 @@ impl PostGrabAPI for RedditAPI {
             .as_object()?;
 
         let title = post_json.get("title")?.as_str()?.to_string();
-        let embed_url = {
-            // imgur url may end in .gifv but that cannot be embedded
+        let is_vid = post_json.get("is_video")?.as_bool()?;
+
+        let embed_url = if is_vid {
+            // use thumbnail as embedurl
+            post_json.get("thumbnail")?.as_str()?.to_string()
+        } else {
             let tmp = post_json.get("url")?.as_str()?.to_string();
 
             if tmp.contains("imgur.com/") {
@@ -40,9 +44,8 @@ impl PostGrabAPI for RedditAPI {
                 tmp
             }
         };
-        let is_vid = post_json.get("is_video")?.as_bool()?;
-        let subreddit = post_json.get("subreddit")?.as_str()?.to_string();
 
+        let subreddit = post_json.get("subreddit")?.as_str()?.to_string();
         let text = post_json.get("selftext")?.as_str()?.to_string();
 
         Ok(Post {

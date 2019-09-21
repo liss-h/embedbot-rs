@@ -40,8 +40,7 @@ fn escape_markdown(title: &str) -> String {
 
 fn should_embed(post: &Post) -> bool {
     (&post.website == "9gag" && post.post_type == PostType::Video)
-        || (&post.website == "reddit" && post.post_type != PostType::Video)
-        || &post.website == "imgur"
+        || &post.website != "9gag"
 }
 
 fn limit_len(text: &str, limit: usize) -> String {
@@ -69,6 +68,36 @@ fn default_embed<'a>(msg: &Message, post: &Post, e: &'a mut CreateEmbed) -> &'a 
         .url(&msg.content)
 }
 
+fn embed_image(msg: &Message, ctx: &Context, post: &Post) -> Result<Message, serenity::Error> {
+    msg.channel_id
+        .send_message(&ctx.http, |m: &mut CreateMessage| {
+            m.embed(|e: &mut CreateEmbed| {
+                default_embed(&msg, &post, e)
+                    .image(&post.embed_url)
+            })
+        })
+}
+
+fn embed_video(msg: &Message, ctx: &Context, post: &Post) -> Result<Message, serenity::Error> {
+    msg.channel_id
+        .send_message(&ctx.http, |m: &mut CreateMessage| {
+            m.content(&format!(
+                ">>> **{author}**\nSource: <{src}>\nEmbedURL: {embed_url}\n\n{title}\n\n{text}",
+                author = msg.author.name,
+                src = msg.content,
+                embed_url = post.embed_url,
+                title = fmt_title(&post),
+                text = limit_len(&post.text, EMBED_CONTENT_MAX_LEN),
+            ))
+        })
+}
+
+fn embed_text(msg: &Message, ctx: &Context, post: &Post) -> Result<Message, serenity::Error> {
+    msg.channel_id
+        .send_message(&ctx.http, |m: &mut CreateMessage| {
+            m.embed(|e: &mut CreateEmbed| default_embed(&msg, &post, e))
+        })
+}
 
 fn send_embed_message(
     msg: &Message,
@@ -76,31 +105,12 @@ fn send_embed_message(
     post: &Post,
 ) -> Result<Message, serenity::Error> {
     match post.post_type {
-        PostType::Image => msg
-            .channel_id
-            .send_message(&ctx.http, |m: &mut CreateMessage| {
-                m.embed(|e: &mut CreateEmbed| {
-                    default_embed(&msg, &post, e)
-                        .image(&post.embed_url)
-                })
-            }),
-        PostType::Video => msg
-            .channel_id
-            .send_message(&ctx.http, |m: &mut CreateMessage| {
-                m.content(&format!(
-                    ">>> **{author}**\nSource: <{src}>\nEmbedURL: {embed_url}\n\n{title}\n\n{text}",
-                    author = msg.author.name,
-                    src = msg.content,
-                    embed_url = post.embed_url,
-                    title = fmt_title(&post),
-                    text  = limit_len(&post.text, EMBED_CONTENT_MAX_LEN),
-                ))
-            }),
-        PostType::Text => msg
-            .channel_id
-            .send_message(&ctx.http, |m: &mut CreateMessage| {
-                m.embed(|e: &mut CreateEmbed| default_embed(&msg, &post, e))
-            })
+        PostType::Image => embed_image(&msg, &ctx, &post),
+        PostType::Video => match post.website.as_ref() {
+                    "reddit" => embed_image(&msg, &ctx, &post), // embed thumbnail
+                    _        => embed_video(&msg, &ctx, &post),
+                },
+        PostType::Text => embed_text(&msg, &ctx, &post)
     }
 }
 
