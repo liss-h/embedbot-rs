@@ -49,6 +49,7 @@ pub fn video_thumbnail_embed(m: &mut CreateMessage, msg: &Message, post: &Post) 
             .description("[click title to watch video]")
             .author(|a| a.name(&msg.author.name))
             .url(&msg.content)
+            .image(&post.embed_url)
     });
 }
 
