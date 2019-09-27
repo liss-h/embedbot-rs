@@ -17,18 +17,6 @@ fn is_url(url: &str) -> bool {
     url.starts_with("http://") || url.starts_with("https://")
 }
 
-fn choose_grab_api(url: &str) -> Option<Box<dyn post_grab_api::PostGrabAPI>> {
-    if url.starts_with("https://www.reddit.com") {
-        Some(Box::new(post_grab_api::reddit::RedditAPI::default()))
-    } else if url.starts_with("https://9gag.com") {
-        Some(Box::new(post_grab_api::ninegag::NineGagAPI::default()))
-    } else if url.starts_with("https://imgur.com/") {
-        Some(Box::new(post_grab_api::imgur::ImgurAPI::default()))
-    } else {
-        None
-    }
-}
-
 fn should_embed(post: &Post) -> bool {
     (&post.website == "9gag" && post.post_type == PostType::Video)
         || &post.website != "9gag"
@@ -43,7 +31,7 @@ fn send_embed_message(
         match post.post_type {
             PostType::Image => image_embed(m, msg, post),
             PostType::Text  => text_embed(m, msg, post),
-            PostType::Video if &post.website == "reddit" => image_embed(m, msg, post), // embed thumbnail
+            PostType::Video if &post.website == "reddit" => video_thumbnail_embed(m, msg, post),
             PostType::Video => video_embed(m, msg, post),
         }
 
@@ -51,7 +39,7 @@ fn send_embed_message(
     })
 }
 
-fn get_post(api: &mut dyn PostGrabAPI, url: &str) -> Result<Post, Error> {
+fn get_post(api: &dyn PostGrabAPI, url: &str) -> Result<Post, Error> {
 
     match api.get_post(url) {
         Ok(post) => Ok(post),
@@ -60,13 +48,34 @@ fn get_post(api: &mut dyn PostGrabAPI, url: &str) -> Result<Post, Error> {
     }
 }
 
-struct EmbedBot;
+#[derive(Default)]
+struct EmbedBot {
+    apis: Vec<Box<dyn PostGrabAPI + Send + Sync>>
+}
+
+impl EmbedBot {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn find_api(&self, url: &str) -> Option<&dyn PostGrabAPI> {
+        self.apis
+            .iter()
+            .find(|a| a.is_suitable(url))
+            .map(|a| a.as_ref() as &dyn PostGrabAPI)
+    }
+
+    fn register_api<T: 'static + PostGrabAPI + Send + Sync>(&mut self, api: T) {
+        self.apis.push(Box::new(api));
+    }
+}
 
 impl EventHandler for EmbedBot {
     fn message(&self, context: Context, msg: Message) {
         if is_url(&msg.content) {
-            match choose_grab_api(&msg.content) {
-                Some(mut api) => match get_post(api.as_mut(), &msg.content) {
+
+            match self.find_api(&msg.content) {
+                Some(api) => match get_post(api, &msg.content) {
                     Ok(post) if should_embed(&post) => {
                         send_embed_message(&context, &msg, &post).expect("could not send msg");
                         msg.delete(context.http).expect("could not delete msg");
@@ -93,8 +102,14 @@ impl EventHandler for EmbedBot {
 }
 
 fn main() {
+    let mut embedbot = EmbedBot::new();
+
+    embedbot.register_api(reddit::RedditAPI::default());
+    embedbot.register_api(ninegag::NineGagAPI::default());
+    embedbot.register_api(imgur::ImgurAPI::default());
+
     let tok = std::env::var("DISCORD_TOKEN").expect("ENVVAR 'DISCORD_TOKEN' not found");
-    let mut client = Client::new(&tok, EmbedBot).expect("could not create client");
+    let mut client = Client::new(&tok, embedbot).expect("could not create discord client");
 
     if let Err(e) = client.start() {
         eprintln!("[Error] Client Err: {:?}", e);

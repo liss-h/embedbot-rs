@@ -4,7 +4,11 @@ use super::*;
 pub struct RedditAPI;
 
 impl PostGrabAPI for RedditAPI {
-    fn get_post(&mut self, url: &str) -> Result<Post, Error> {
+    fn is_suitable(&self, url: &str) -> bool {
+        url.starts_with("https://www.reddit.com")
+    }
+
+    fn get_post(&self, url: &str) -> Result<Post, Error> {
         let json = wget_json(url, USER_AGENT)?;
 
         let post_json = json
@@ -29,11 +33,12 @@ impl PostGrabAPI for RedditAPI {
         } else {
             let tmp = post_json.get("url")?.as_str()?.to_string();
 
-            if tmp.contains("imgur.com/") {
+            let imgur = imgur::ImgurAPI::default();
+
+            if imgur.is_suitable(&tmp) {
                 if tmp.ends_with(".gifv") {
                     tmp[0..(tmp.len() - 1)].to_string()
                 } else {
-                    let mut imgur = imgur::ImgurAPI::default();
 
                     match imgur.get_post(&tmp) {
                         Ok(post) => post.embed_url,

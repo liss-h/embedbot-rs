@@ -47,7 +47,8 @@ pub struct Post {
 }
 
 pub trait PostGrabAPI {
-    fn get_post(&mut self, url: &str) -> Result<Post, Error>;
+    fn is_suitable(&self, url: &str) -> bool;
+    fn get_post(&self, url: &str) -> Result<Post, Error>;
 }
 
 pub fn wget(url: &str, user_agent: &str) -> Result<reqwest::Response, Error> {

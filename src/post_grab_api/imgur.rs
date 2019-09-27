@@ -6,7 +6,11 @@ use scraper::selector::Selector;
 pub struct ImgurAPI;
 
 impl PostGrabAPI for ImgurAPI {
-    fn get_post(&mut self, url: &str) -> Result<Post, Error> {
+    fn is_suitable(&self, url: &str) -> bool {
+        url.starts_with("https://imgur.com/")
+    }
+
+    fn get_post(&self, url: &str) -> Result<Post, Error> {
         let html = wget_html(url, USER_AGENT)?;
 
         let title_selector = Selector::parse("title").unwrap();

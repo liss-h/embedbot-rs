@@ -4,7 +4,11 @@ use super::*;
 pub struct NineGagAPI;
 
 impl PostGrabAPI for NineGagAPI {
-    fn get_post(&mut self, url: &str) -> Result<Post, Error> {
+    fn is_suitable(&self, url: &str) -> bool {
+        url.starts_with("https://9gag.com")
+    }
+
+    fn get_post(&self, url: &str) -> Result<Post, Error> {
         let html = wget_html(url, USER_AGENT)?;
 
         let title: String = {

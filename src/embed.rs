@@ -43,6 +43,15 @@ pub fn image_embed(m: &mut CreateMessage, msg: &Message, post: &Post) {
     m.embed(|e| default_embed(e, msg, post).image(&post.embed_url));
 }
 
+pub fn video_thumbnail_embed(m: &mut CreateMessage, msg: &Message, post: &Post) {
+    m.embed(|e| {
+        e.title(&fmt_title(&post))
+            .description("[click title to watch video]")
+            .author(|a| a.name(&msg.author.name))
+            .url(&msg.content)
+    });
+}
+
 pub fn video_embed(m: &mut CreateMessage, msg: &Message, post: &Post) {
     m.content(format!(
         ">>> **{author}**\nSource: <{src}>\nEmbedURL: {embed_url}\n\n{title}\n\n{text}",
