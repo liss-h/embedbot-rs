@@ -25,21 +25,21 @@ impl PostGrabAPI for RedditAPI {
             .as_object()?;
 
         let title = post_json.get("title")?.as_str()?.to_string();
-        let is_vid = post_json.get("is_video")?.as_bool()?;
+        let is_vid_tag = post_json.get("is_video")?.as_bool()?;
 
-        let embed_url = if is_vid {
+        let embed_url = if is_vid_tag {
             // use thumbnail as embedurl
             post_json.get("thumbnail")?.as_str()?.to_string()
         } else {
             let tmp = post_json.get("url")?.as_str()?.to_string();
-
             let imgur = imgur::ImgurAPI::default();
 
             if imgur.is_suitable(&tmp) {
-                if tmp.ends_with(".gifv") {
-                    tmp[0..(tmp.len() - 1)].to_string()
-                } else {
 
+                if tmp.ends_with(".gifv") {
+                    tmp
+                }
+                else {
                     match imgur.get_post(&tmp) {
                         Ok(post) => post.embed_url,
                         Err(_) => tmp
@@ -49,6 +49,8 @@ impl PostGrabAPI for RedditAPI {
                 tmp
             }
         };
+
+        let is_vid = is_vid_tag || embed_url.ends_with(".gif");
 
         let subreddit = post_json.get("subreddit")?.as_str()?.to_string();
         let text = post_json.get("selftext")?.as_str()?.to_string();

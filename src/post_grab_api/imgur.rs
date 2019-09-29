@@ -7,7 +7,8 @@ pub struct ImgurAPI;
 
 impl PostGrabAPI for ImgurAPI {
     fn is_suitable(&self, url: &str) -> bool {
-        url.starts_with("https://imgur.com/")
+        url.starts_with("https://")
+            && url.contains("imgur.com")
     }
 
     fn get_post(&self, url: &str) -> Result<Post, Error> {

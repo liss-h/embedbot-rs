@@ -31,6 +31,7 @@ fn send_embed_message(
         match post.post_type {
             PostType::Image => image_embed(m, msg, post),
             PostType::Text  => text_embed(m, msg, post),
+            PostType::Video if &post.website == "reddit" && post.embed_url.ends_with(".gif") => video_embed(m, msg, post),
             PostType::Video if &post.website == "reddit" => video_thumbnail_embed(m, msg, post),
             PostType::Video => video_embed(m, msg, post),
         }
