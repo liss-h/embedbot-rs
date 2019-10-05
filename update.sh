@@ -13,6 +13,10 @@ fi
 
 /root/.cargo/bin/cargo build --release
 
-rm /usr/bin/embedbot-rs
-cp ./target/release/embedbot-rs /usr/bin
-chmod +x /usr/bin/embedbot-rs
+rm /init || true
+cp ./target/release/embedbot-rs /init
+chmod +x /init
+
+rm /update || true
+cp ./update.sh /update
+chmod +x /update
