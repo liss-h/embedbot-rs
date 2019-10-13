@@ -43,7 +43,8 @@ pub struct Post {
     pub embed_url: String,
     pub origin: String,
     pub post_type: PostType,
-    pub text: String
+    pub text: String,
+    pub flair: String,
 }
 
 pub trait PostGrabAPI {

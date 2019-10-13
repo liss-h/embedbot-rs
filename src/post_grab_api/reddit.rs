@@ -25,6 +25,7 @@ impl PostGrabAPI for RedditAPI {
             .as_object()?;
 
         let title = post_json.get("title")?.as_str()?.to_string();
+
         let is_vid_tag = post_json.get("is_video")?.as_bool()?;
 
         let embed_url = if is_vid_tag {
@@ -50,24 +51,31 @@ impl PostGrabAPI for RedditAPI {
             }
         };
 
-        let is_vid = is_vid_tag || embed_url.ends_with(".gif");
+        let post_type =
+            if embed_url.ends_with(".gif") {
+                PostType::Video
+            } else {
+                match post_json.get("post_hint") {
+                    Some(serde_json::Value::String(s)) if s == "hosted:video" || s == "rich:video" => PostType::Video,
+                    Some(serde_json::Value::String(s)) if s == "image" => PostType::Image,
+                    None => PostType::Text,
+                    _ => PostType::Image,
+                }
+            };
 
         let subreddit = post_json.get("subreddit")?.as_str()?.to_string();
         let text = post_json.get("selftext")?.as_str()?.to_string();
 
+        let flair = post_json.get("link_flair_text")?.as_str()?.to_string();
+
         Ok(Post {
             website: "reddit".to_string(),
+            origin: format!("reddit.com/r/{}", subreddit),
             title,
             embed_url,
-            post_type: if is_vid {
-                PostType::Video
-            } else if text.is_empty() {
-                PostType::Image
-            } else {
-                PostType::Text
-            },
-            origin: format!("reddit.com/r/{}", subreddit),
+            post_type,
             text,
+            flair,
         })
     }
 }

@@ -29,7 +29,11 @@ pub fn fmt_title(post: &Post) -> String {
         &escape_markdown(&post.title),
         EMBED_TITLE_MAX_LEN - 9 - post.origin.len()); // -9 for formatting
 
-    format!("'{}' - **{}**", title, post.origin)
+    if post.flair.is_empty() {
+        format!("'{}' - **{}**", title, post.origin)
+    } else {
+        format!("'{}' [{}] - **{}**", title, post.flair, post.origin)
+    }
 }
 
 pub fn default_embed<'a>(e: &'a mut CreateEmbed, msg: &Message, post: &Post) -> &'a mut CreateEmbed {

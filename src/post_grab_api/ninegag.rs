@@ -72,6 +72,7 @@ impl PostGrabAPI for NineGagAPI {
             title: title[0..(title.len() - 7)].to_string(), // remove ' - 9GAG' from end
             embed_url,
             post_type,
+            flair: String::new(),
         })
     }
 }
