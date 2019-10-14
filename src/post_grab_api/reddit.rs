@@ -66,7 +66,10 @@ impl PostGrabAPI for RedditAPI {
         let subreddit = post_json.get("subreddit")?.as_str()?.to_string();
         let text = post_json.get("selftext")?.as_str()?.to_string();
 
-        let flair = post_json.get("link_flair_text")?.as_str()?.to_string();
+        let flair = match post_json.get("link_flair_text")? {
+            serde_json::Value::String(s) => s.clone(),
+            _ => String::new(),
+        };
 
         Ok(Post {
             website: "reddit".to_string(),
