@@ -1,5 +1,26 @@
 use super::*;
 
+
+fn has_image_extension(s: &str) -> bool {
+    const EXTENSIONS: [&'static str; 11] = [
+        ".jpg",
+        ".png",
+        ".gif",
+        ".tif",
+        ".bmp",
+        ".dib",
+        ".jpeg",
+        ".jfif",
+        ".tiff",
+        ".heic",
+    ];
+
+    EXTENSIONS
+        .iter()
+        .any(|x| s.ends_with(x))
+}
+
+
 #[derive(Default)]
 pub struct RedditAPI;
 
@@ -58,8 +79,8 @@ impl PostGrabAPI for RedditAPI {
                 match post_json.get("post_hint") {
                     Some(serde_json::Value::String(s)) if s == "hosted:video" || s == "rich:video" => PostType::Video,
                     Some(serde_json::Value::String(s)) if s == "image" => PostType::Image,
-                    None => PostType::Text,
-                    _ => PostType::Image,
+                    None if has_image_extension(&embed_url) => PostType::Image,
+                    _ => PostType::Text,
                 }
             };
 
