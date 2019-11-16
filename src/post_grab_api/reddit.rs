@@ -10,6 +10,7 @@ fn has_image_extension(s: &str) -> bool {
         ".bmp",
         ".dib",
         ".jpeg",
+        ".jpe",
         ".jfif",
         ".tiff",
         ".heic",
