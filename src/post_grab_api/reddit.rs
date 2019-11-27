@@ -77,11 +77,15 @@ impl PostGrabAPI for RedditAPI {
             if embed_url.ends_with(".gif") {
                 PostType::Video
             } else {
-                match post_json.get("post_hint") {
-                    Some(serde_json::Value::String(s)) if s == "hosted:video" || s == "rich:video" => PostType::Video,
-                    Some(serde_json::Value::String(s)) if s == "image" => PostType::Image,
-                    None if has_image_extension(&embed_url) => PostType::Image,
-                    _ => PostType::Text,
+                match post_json.get("secure_media") {
+                    None | Some(serde_json::Value::Null) => match post_json.get("post_hint") {
+                        Some(serde_json::Value::String(s)) if s.contains("video") => PostType::Video,
+                        Some(serde_json::Value::String(s)) if s == "image" => PostType::Image,
+                        None if has_image_extension(&embed_url) => PostType::Image,
+                        _ => PostType::Text,
+                    },
+                    
+                    Some(_) => PostType::Video,
                 }
             };
 
