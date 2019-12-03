@@ -47,13 +47,17 @@ impl PostGrabAPI for NineGagAPI {
                 .get("url")?
                 .as_str()?,
 
-            "Animated" => post_json
-                .get("images")?
-                .as_object()?
-                .get("image460svwm")?
-                .as_object()?
-                .get("url")?
-                .as_str()?,
+            "Animated" => {
+                let imgs = post_json
+                    .get("images")?
+                    .as_object()?;
+
+                imgs.get("image460svwm")
+                        .or_else(|| imgs.get("image460sv"))?
+                    .as_object()?
+                    .get("url")?
+                    .as_str()?
+            },
 
             _ => post_json.get("vp9Url")?.as_str()?,
         }
