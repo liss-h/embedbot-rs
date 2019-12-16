@@ -2,6 +2,9 @@
 
 set -e
 
+dnf update --refresh -y
+/root/.cargo/bin/rustup update
+
 cd /tmp
 
 if cd ./embedbot-rs; then
