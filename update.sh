@@ -3,7 +3,7 @@
 set -e
 
 dnf update --refresh -y
-/root/.cargo/bin/rustup update
+rustup update
 
 cd /tmp
 
@@ -14,7 +14,7 @@ else
     cd ./embedbot-rs
 fi
 
-/root/.cargo/bin/cargo build --release
+cargo build --release
 
 rm /init || true
 cp ./target/release/embedbot-rs /init

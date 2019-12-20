@@ -1,6 +1,7 @@
 FROM docker.io/fedora
 
 ENV DISCORD_TOKEN=YOUR_DISCORD_TOKEN_HERE
+ENV PATH="/root/.cargo/bin:${PATH}"
 
 RUN dnf update --refresh -y
 RUN dnf install gcc git openssl-devel -y
