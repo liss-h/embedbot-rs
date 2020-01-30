@@ -29,7 +29,8 @@ fn send_embed_message(
 ) -> Result<Message, serenity::Error> {
     msg.channel_id.send_message(ctx, |m| {
         match post.post_type {
-            PostType::Image => image_embed(m, msg, post),
+            PostType::Image if !post.nsfw => image_embed(m, msg, post),
+            PostType::Image               => nsfw_embed(m, msg, post),
             PostType::Text  => text_embed(m, msg, post),
             PostType::Video if &post.website == "reddit" && post.embed_url.ends_with(".gif") => video_embed(m, msg, post),
             PostType::Video if &post.website == "reddit" => video_thumbnail_embed(m, msg, post),

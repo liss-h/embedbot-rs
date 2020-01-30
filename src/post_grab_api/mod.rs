@@ -45,6 +45,7 @@ pub struct Post {
     pub post_type: PostType,
     pub text: String,
     pub flair: String,
+    pub nsfw: bool,
 }
 
 pub trait PostGrabAPI {

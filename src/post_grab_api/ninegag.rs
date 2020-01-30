@@ -77,6 +77,7 @@ impl PostGrabAPI for NineGagAPI {
             embed_url,
             post_type,
             flair: String::new(),
+            nsfw: false,
         })
     }
 }

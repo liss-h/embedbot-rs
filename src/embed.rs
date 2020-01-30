@@ -47,6 +47,16 @@ pub fn image_embed(m: &mut CreateMessage, msg: &Message, post: &Post) {
     m.embed(|e| default_embed(e, msg, post).image(&post.embed_url));
 }
 
+pub fn nsfw_embed(m: &mut CreateMessage, msg: &Message, post: &Post) {
+    m.embed(|e| {
+        e.title(&fmt_title(&post))
+            .description(&limit_len(&post.text, EMBED_CONTENT_MAX_LEN))
+            .field("Warning NSFW", "Click to view content", true)
+            .author(|ab| ab.name(&msg.author.name))
+            .url(&msg.content)
+    });
+}
+
 pub fn video_thumbnail_embed(m: &mut CreateMessage, msg: &Message, post: &Post) {
     m.embed(|e| {
         e.title(&fmt_title(&post))
@@ -69,5 +79,10 @@ pub fn video_embed(m: &mut CreateMessage, msg: &Message, post: &Post) {
 }
 
 pub fn text_embed(m: &mut CreateMessage, msg: &Message, post: &Post) {
-    m.embed(|e| default_embed(e, msg, post));
+    m.embed(|e| {
+        e.title(&fmt_title(&post))
+            .description(&limit_len(&format!("{}\n{}", post.embed_url, post.text), EMBED_CONTENT_MAX_LEN))
+            .author(|author_builder| author_builder.name(&msg.author.name))
+            .url(&msg.content)
+    });
 }

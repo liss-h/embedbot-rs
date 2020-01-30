@@ -1,4 +1,5 @@
 use super::*;
+use serde_json::Value;
 
 
 fn has_image_extension(s: &str) -> bool {
@@ -48,29 +49,32 @@ impl PostGrabAPI for RedditAPI {
 
         let title = post_json.get("title")?.as_str()?.to_string();
 
-        let is_vid_tag = post_json.get("is_video")?.as_bool()?;
+        // let is_vid_tag = post_json.get("is_video")?.as_bool()?;
 
-        let embed_url = if is_vid_tag {
+        let (post_type, embed_url) = match post_json.get("secure_media") {
+            Some(Value::Object(sm)) if sm.contains_key("reddit_video")
+                => (PostType::Video, post_json.get("thumbnail")?.as_str()?.to_string()),
+
+            Some(Value::Object(sm)) if sm.contains_key("oembed")
+                => (PostType::Image, sm.get("oembed")?.as_object()?.get("thumbnail_url")?.as_str()?.to_string()),
+
+            _ => {
+                let url = post_json.get("url")?.as_str()?.to_string();
+
+                if has_image_extension(&url) {
+                    (PostType::Image, url)
+                } else {
+                    (PostType::Text, url)
+                }
+            }
+        };
+
+
+        /*let embed_url = if is_vid_tag {
             // use thumbnail as embedurl
             post_json.get("thumbnail")?.as_str()?.to_string()
         } else {
-            let tmp = post_json.get("url")?.as_str()?.to_string();
-            let imgur = imgur::ImgurAPI::default();
-
-            if imgur.is_suitable(&tmp) {
-
-                if tmp.ends_with(".gifv") {
-                    tmp
-                }
-                else {
-                    match imgur.get_post(&tmp) {
-                        Ok(post) => post.embed_url,
-                        Err(_) => tmp
-                    }
-                }
-            } else {
-                tmp
-            }
+            post_json.get("url")?.as_str()?.to_string()
         };
 
         let post_type =
@@ -87,15 +91,19 @@ impl PostGrabAPI for RedditAPI {
                     
                     Some(_) => PostType::Video,
                 }
-            };
+            };*/
 
         let subreddit = post_json.get("subreddit")?.as_str()?.to_string();
         let text = post_json.get("selftext")?.as_str()?.to_string();
 
-        let flair = match post_json.get("link_flair_text")? {
-            serde_json::Value::String(s) => s.clone(),
+        let flair = match post_json.get("link_flair_text") {
+            Some(Value::String(s)) => s.clone(),
             _ => String::new(),
         };
+
+        let nsfw = post_json.get("over_18")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
 
         Ok(Post {
             website: "reddit".to_string(),
@@ -105,6 +113,7 @@ impl PostGrabAPI for RedditAPI {
             post_type,
             text,
             flair,
+            nsfw,
         })
     }
 }

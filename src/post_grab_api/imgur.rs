@@ -39,6 +39,7 @@ impl PostGrabAPI for ImgurAPI {
             embed_url,
             post_type: PostType::Image,
             flair: String::new(),
+            nsfw: false,
         })
     }
 }
