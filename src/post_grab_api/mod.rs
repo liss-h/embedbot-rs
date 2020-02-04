@@ -1,6 +1,12 @@
+use serenity::builder::CreateMessage;
+use serenity::model::user::User;
+
 pub mod ninegag;
 pub mod reddit;
 pub mod imgur;
+pub mod util;
+
+pub use util::*;
 
 pub const USER_AGENT: &str = "embedbot v0.1";
 
@@ -29,45 +35,15 @@ impl From<serde_json::Error> for Error {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum PostType {
-    Image,
-    Video,
-    Text,
-}
-
-#[derive(Clone)]
-pub struct Post {
-    pub website: String,
-    pub title: String,
-    pub embed_url: String,
-    pub origin: String,
-    pub post_type: PostType,
-    pub text: String,
-    pub flair: String,
-    pub nsfw: bool,
-}
 
 pub trait PostGrabAPI {
     fn is_suitable(&self, url: &str) -> bool;
-    fn get_post(&self, url: &str) -> Result<Post, Error>;
+    fn get_post(&self, url: &str) -> Result<Box<dyn Post>, Error>;
 }
 
-pub fn wget(url: &str, user_agent: &str) -> Result<reqwest::Response, Error> {
-    let client = reqwest::Client::new();
-    client
-        .get(&format!("{}/.json", url))
-        .header("User-Agent", user_agent)
-        .send()
-        .map_err(|e| e.into())
+
+pub trait Post {
+    fn should_embed(&self) -> bool;
+    fn create_embed(&self, u: &User, create_message: &mut CreateMessage);
 }
 
-pub fn wget_html(url: &str, user_agent: &str) -> Result<scraper::Html, Error> {
-    let mut resp = wget(url, user_agent)?;
-    Ok(scraper::Html::parse_document(&resp.text()?))
-}
-
-pub fn wget_json(url: &str, user_agent: &str) -> Result<serde_json::Value, Error> {
-    let mut resp = wget(url, user_agent)?;
-    resp.json().map_err(|e| e.into())
-}

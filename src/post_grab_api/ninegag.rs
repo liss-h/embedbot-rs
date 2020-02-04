@@ -1,4 +1,53 @@
 use super::*;
+use serenity::model::user::User;
+
+
+fn fmt_title(p: &NineGagPost) -> String {
+    let title = limit_len(
+        &escape_markdown(&p.title),
+        EMBED_TITLE_MAX_LEN - 12); // -12 for formatting
+
+    format!("'{}' - **GAG**", title)
+}
+
+
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub enum NineGagPostType {
+    Image,
+    Video,
+}
+
+#[derive(Clone)]
+pub struct NineGagPost {
+    src: String,
+    title: String,
+    embed_url: String,
+    post_type: NineGagPostType,
+}
+
+impl Post for NineGagPost {
+    fn should_embed(&self) -> bool {
+        self.post_type != NineGagPostType::Image
+    }
+
+    fn create_embed(&self, u: &User, create_msg: &mut CreateMessage) {
+        match self.post_type {
+            NineGagPostType::Image => create_msg.embed(|e| {
+                e.title(&self.title)
+                    .url(&self.src)
+                    .image(&self.embed_url)
+            }),
+            NineGagPostType::Video => create_msg.content(format!(
+                ">>> **{author}**\nSource: <{src}>\nEmbedURL: {embed_url}\n\n{title}",
+                author = u.name,
+                src = &self.src,
+                embed_url = self.embed_url,
+                title = fmt_title(self),
+            ))
+        };
+    }
+}
+
 
 #[derive(Default)]
 pub struct NineGagAPI;
@@ -8,7 +57,7 @@ impl PostGrabAPI for NineGagAPI {
         url.starts_with("https://9gag.com")
     }
 
-    fn get_post(&self, url: &str) -> Result<Post, Error> {
+    fn get_post(&self, url: &str) -> Result<Box<dyn Post>, Error> {
         let html = wget_html(url, USER_AGENT)?;
 
         let title: String = {
@@ -30,9 +79,7 @@ impl PostGrabAPI for NineGagAPI {
         };
 
         let post_json = build_json
-            .as_object()?
             .get("data")?
-            .as_object()?
             .get("post")?
             .as_object()?;
 
@@ -41,9 +88,7 @@ impl PostGrabAPI for NineGagAPI {
         let embed_url = match post_type_str {
             "Photo" => post_json
                 .get("images")?
-                .as_object()?
                 .get("image700")?
-                .as_object()?
                 .get("url")?
                 .as_str()?,
 
@@ -53,8 +98,7 @@ impl PostGrabAPI for NineGagAPI {
                     .as_object()?;
 
                 imgs.get("image460svwm")
-                        .or_else(|| imgs.get("image460sv"))?
-                    .as_object()?
+                        .or(imgs.get("image460sv"))?
                     .get("url")?
                     .as_str()?
             },
@@ -64,20 +108,16 @@ impl PostGrabAPI for NineGagAPI {
         .to_string();
 
         let post_type = if post_type_str == "Photo" {
-            PostType::Image
+            NineGagPostType::Image
         } else {
-            PostType::Video
+            NineGagPostType::Video
         };
 
-        Ok(Post {
-            website: "9gag".to_string(),
-            origin: "9gag".to_string(),
-            text: "".to_string(),
+        Ok(Box::new(NineGagPost {
+            src: url.to_string(),
             title: title[0..(title.len() - 7)].to_string(), // remove ' - 9GAG' from end
             embed_url,
             post_type,
-            flair: String::new(),
-            nsfw: false,
-        })
+        }))
     }
 }

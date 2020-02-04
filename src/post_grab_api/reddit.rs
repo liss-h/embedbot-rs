@@ -1,5 +1,6 @@
 use super::*;
 use serde_json::Value;
+use serenity::builder::CreateEmbed;
 
 
 fn has_image_extension(s: &str) -> bool {
@@ -22,6 +23,86 @@ fn has_image_extension(s: &str) -> bool {
         .any(|x| s.ends_with(x))
 }
 
+fn fmt_title(p: &RedditPost) -> String {
+    let title = limit_len(
+        &escape_markdown(&p.title),
+        EMBED_TITLE_MAX_LEN - 24 - p.subreddit.len() - p.flair.len()); // -24 for formatting
+
+    if p.flair.is_empty() {
+        format!("'{}' - **reddit.com/r/{}**", title, p.subreddit)
+    } else {
+        format!("'{}' [{}] - **reddit.com/r/{}**", title, p.flair, p.subreddit)
+    }
+}
+
+
+fn base_embed<'a>(e: &'a mut CreateEmbed, u: &User, post: &RedditPost) -> &'a mut CreateEmbed {
+    e.title(&fmt_title(post))
+        .description(&limit_descr_len(&format!("{}\n{}", &post.embed_url, &post.text)))
+        .author(|a| a.name(&u.name))
+        .url(&post.src)
+}
+
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum RedditPostType {
+    Text,
+    Image,
+    Video
+}
+
+#[derive(Clone)]
+pub struct RedditPost {
+    src: String,
+    subreddit: String,
+    title: String,
+    embed_url: String,
+    post_type: RedditPostType,
+    text: String,
+    flair: String,
+    nsfw: bool,
+}
+
+impl Post for RedditPost {
+    fn should_embed(&self) -> bool {
+        true
+    }
+
+    fn create_embed(&self, u: &User, create_msg: &mut CreateMessage) {
+        match self.post_type {
+            RedditPostType::Text => create_msg.embed(|e| base_embed(e, u, self)),
+
+            RedditPostType::Image if self.nsfw => create_msg.embed(|e| {
+                base_embed(e, u, self)
+                    .field("Warning NSFW", "Click to view content", true)
+            }),
+
+            RedditPostType::Image => create_msg.embed(|e| {
+                base_embed(e, u, self)
+                    .image(&self.embed_url)
+            }),
+
+            RedditPostType::Video if self.embed_url.ends_with(".gif") => create_msg.content(format!(
+                ">>> **{author}**\nSource: <{src}>\nEmbedURL: {embed_url}\n\n{title}\n\n{text}",
+                author = &u.name,
+                src = &self.src,
+                embed_url = &self.embed_url,
+                title = fmt_title(self),
+                text = limit_descr_len(&self.text),
+            )),
+
+            RedditPostType::Video => create_msg.embed(|e| {
+                e.title(&fmt_title(self))
+                    .description("[click title to watch video]")
+                    .author(|a| a.name(&u.name))
+                    .url(&self.src)
+                    .image(&self.embed_url)
+            }),
+        };
+    }
+}
+
+
 
 #[derive(Default)]
 pub struct RedditAPI;
@@ -31,67 +112,36 @@ impl PostGrabAPI for RedditAPI {
         url.starts_with("https://www.reddit.com")
     }
 
-    fn get_post(&self, url: &str) -> Result<Post, Error> {
+    fn get_post(&self, url: &str) -> Result<Box<dyn Post>, Error> {
         let json = wget_json(url, USER_AGENT)?;
 
         let post_json = json
-            .as_array()?
             .get(0)?
-            .as_object()?
             .get("data")?
-            .as_object()?
             .get("children")?
-            .as_array()?
             .get(0)?
-            .as_object()?
             .get("data")?
             .as_object()?;
 
         let title = post_json.get("title")?.as_str()?.to_string();
 
-        // let is_vid_tag = post_json.get("is_video")?.as_bool()?;
-
         let (post_type, embed_url) = match post_json.get("secure_media") {
             Some(Value::Object(sm)) if sm.contains_key("reddit_video")
-                => (PostType::Video, post_json.get("thumbnail")?.as_str()?.to_string()),
+                => (RedditPostType::Video, post_json.get("thumbnail")?.as_str()?.to_string()),
 
             Some(Value::Object(sm)) if sm.contains_key("oembed")
-                => (PostType::Image, sm.get("oembed")?.as_object()?.get("thumbnail_url")?.as_str()?.to_string()),
+                => (RedditPostType::Image, sm.get("oembed")?.get("thumbnail_url")?.as_str()?.to_string()),
 
             _ => {
                 let url = post_json.get("url")?.as_str()?.to_string();
 
                 if has_image_extension(&url) {
-                    (PostType::Image, url)
+                    (RedditPostType::Image, url)
                 } else {
-                    (PostType::Text, url)
+                    (RedditPostType::Text, url)
                 }
             }
         };
-
-
-        /*let embed_url = if is_vid_tag {
-            // use thumbnail as embedurl
-            post_json.get("thumbnail")?.as_str()?.to_string()
-        } else {
-            post_json.get("url")?.as_str()?.to_string()
-        };
-
-        let post_type =
-            if embed_url.ends_with(".gif") {
-                PostType::Video
-            } else {
-                match post_json.get("secure_media") {
-                    None | Some(serde_json::Value::Null) => match post_json.get("post_hint") {
-                        Some(serde_json::Value::String(s)) if s.contains("video") => PostType::Video,
-                        Some(serde_json::Value::String(s)) if s == "image" => PostType::Image,
-                        None if has_image_extension(&embed_url) => PostType::Image,
-                        _ => PostType::Text,
-                    },
-                    
-                    Some(_) => PostType::Video,
-                }
-            };*/
 
         let subreddit = post_json.get("subreddit")?.as_str()?.to_string();
         let text = post_json.get("selftext")?.as_str()?.to_string();
@@ -105,15 +155,15 @@ impl PostGrabAPI for RedditAPI {
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
-        Ok(Post {
-            website: "reddit".to_string(),
-            origin: format!("reddit.com/r/{}", subreddit),
+        Ok(Box::new(RedditPost {
+            src: url.to_string(), // edit remove android sharing stuff
+            subreddit,
             title,
             embed_url,
             post_type,
             text,
             flair,
             nsfw,
-        })
+        }))
     }
 }

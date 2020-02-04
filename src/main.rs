@@ -9,20 +9,13 @@ use serenity::prelude::*;
 mod post_grab_api;
 use post_grab_api::*;
 
-mod embed;
-use embed::*;
-
 
 fn is_url(url: &str) -> bool {
     url.starts_with("http://") || url.starts_with("https://")
 }
 
-fn should_embed(post: &Post) -> bool {
-    (&post.website == "9gag" && post.post_type == PostType::Video)
-        || &post.website != "9gag"
-}
 
-fn send_embed_message(
+/*fn send_embed_message(
     ctx: &Context,
     msg: &Message,
     post: &Post,
@@ -39,9 +32,9 @@ fn send_embed_message(
 
         m
     })
-}
+}*/
 
-fn get_post(api: &dyn PostGrabAPI, url: &str) -> Result<Post, Error> {
+fn get_post(api: &dyn PostGrabAPI, url: &str) -> Result<Box<dyn Post>, Error> {
 
     match api.get_post(url) {
         Ok(post) => Ok(post),
@@ -78,11 +71,15 @@ impl EventHandler for EmbedBot {
 
             match self.find_api(&msg.content) {
                 Some(api) => match get_post(api, &msg.content) {
-                    Ok(post) if should_embed(&post) => {
-                        send_embed_message(&context, &msg, &post).expect("could not send msg");
+                    Ok(post) if post.should_embed() => {
+                        msg.channel_id.send_message(&context, |m| {
+                            post.create_embed(&msg.author, m);
+                            m
+                        }).expect("could not send msg");
+
                         msg.delete(context.http).expect("could not delete msg");
 
-                        println!("[Info] embedded '{}' as {:?}", msg.content, post.post_type);
+                        println!("[Info] embedded '{}'", msg.content);
                     }
                     Ok(_) => println!(
                         "[Info] ignoring '{}'. Reason: not supposed to embed",

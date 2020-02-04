@@ -2,6 +2,38 @@ use super::*;
 
 use scraper::selector::Selector;
 
+fn fmt_title(p: &ImgurPost) -> String {
+    let title = limit_len(
+        &escape_markdown(&p.title),
+        EMBED_TITLE_MAX_LEN - 14); // -14 for formatting
+
+    format!("'{}' - **imgur**", title)
+}
+
+
+#[derive(Clone)]
+pub struct ImgurPost {
+    src: String,
+    title: String,
+    embed_url: String,
+}
+
+impl Post for ImgurPost {
+    fn should_embed(&self) -> bool {
+        true
+    }
+
+    fn create_embed<'a>(&self, u: &User, create_msg: &mut CreateMessage) {
+        create_msg.embed(|e| {
+            e.title(&fmt_title(self))
+                .author(|a| a.name(&u.name))
+                .url(&self.src)
+                .image(&self.embed_url)
+        });
+    }
+}
+
+
 #[derive(Default)]
 pub struct ImgurAPI;
 
@@ -11,7 +43,7 @@ impl PostGrabAPI for ImgurAPI {
             && url.contains("imgur.com")
     }
 
-    fn get_post(&self, url: &str) -> Result<Post, Error> {
+    fn get_post(&self, url: &str) -> Result<Box<dyn Post>, Error> {
         let html = wget_html(url, USER_AGENT)?;
 
         let title_selector = Selector::parse("title").unwrap();
@@ -31,15 +63,10 @@ impl PostGrabAPI for ImgurAPI {
             .attr("href")?
             .to_string();
 
-        Ok(Post {
-            website: "imgur".to_string(),
-            origin: "imgur".to_string(),
-            text: String::new(),
+        Ok(Box::new(ImgurPost {
+            src: url.to_string(),
             title,
             embed_url,
-            post_type: PostType::Image,
-            flair: String::new(),
-            nsfw: false,
-        })
+        }))
     }
 }
