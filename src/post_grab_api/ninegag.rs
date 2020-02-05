@@ -7,7 +7,7 @@ fn fmt_title(p: &NineGagPost) -> String {
         &escape_markdown(&p.title),
         EMBED_TITLE_MAX_LEN - 12); // -12 for formatting
 
-    format!("'{}' - **GAG**", title)
+    format!("'{}' - **9GAG**", title)
 }
 
 

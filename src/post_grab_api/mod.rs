@@ -8,7 +8,7 @@ pub mod util;
 
 pub use util::*;
 
-pub const USER_AGENT: &str = "embedbot v0.1";
+pub const USER_AGENT: &str = "embedbot v0.2";
 
 #[derive(Debug)]
 pub enum Error {
