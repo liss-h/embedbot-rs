@@ -24,20 +24,24 @@ fn has_image_extension(s: &str) -> bool {
 }
 
 fn fmt_title(p: &RedditPost) -> String {
+    let flair = (!p.flair.is_empty()).then_some(format!("[{}] ", p.flair)).unwrap_or_default();
+    let xpost = p.is_xpost.then_some(format!("\n[XPosted from r/{}]", p.original_subreddit)).unwrap_or_default();
+
     let title = limit_len(
         &escape_markdown(&p.title),
-        EMBED_TITLE_MAX_LEN - 24 - p.subreddit.len() - p.flair.len()); // -24 for formatting
+        EMBED_TITLE_MAX_LEN - 34 - p.subreddit.len() - flair.len() - xpost.len()); // -34 for formatting
 
-    if p.flair.is_empty() {
-        format!("'{}' - **reddit.com/r/{}**", title, p.subreddit)
-    } else {
-        format!("'{}' [{}] - **reddit.com/r/{}**", title, p.flair, p.subreddit)
-    }
+    format!("'{title}' {flair}- **reddit.com/r/{subreddit}{xpost_marker}**",
+        title = title,
+        flair = flair,
+        subreddit = p.subreddit,
+        xpost_marker = xpost
+    )
 }
 
 
 fn base_embed<'a>(e: &'a mut CreateEmbed, u: &User, post: &RedditPost) -> &'a mut CreateEmbed {
-    e.title(&fmt_title(post))
+    e.title(&fmt_title(&post))
         .description(&limit_descr_len(&format!("{}\n{}", &post.embed_url, &post.text)))
         .author(|a| a.name(&u.name))
         .url(&post.src)
@@ -55,12 +59,14 @@ pub enum RedditPostType {
 pub struct RedditPost {
     src: String,
     subreddit: String,
+    original_subreddit: String,
     title: String,
     embed_url: String,
     post_type: RedditPostType,
     text: String,
     flair: String,
     nsfw: bool,
+    is_xpost: bool,
 }
 
 impl Post for RedditPost {
@@ -69,35 +75,39 @@ impl Post for RedditPost {
     }
 
     fn create_embed(&self, u: &User, create_msg: &mut CreateMessage) {
-        match self.post_type {
-            RedditPostType::Text => create_msg.embed(|e| base_embed(e, u, self)),
-
-            RedditPostType::Image if self.nsfw => create_msg.embed(|e| {
-                base_embed(e, u, self)
-                    .field("Warning NSFW", "Click to view content", true)
-            }),
-
-            RedditPostType::Image => create_msg.embed(|e| {
-                base_embed(e, u, self)
-                    .image(&self.embed_url)
-            }),
-
-            RedditPostType::Video if self.embed_url.ends_with(".gif") => create_msg.content(format!(
-                ">>> **{author}**\nSource: <{src}>\nEmbedURL: {embed_url}\n\n{title}\n\n{text}",
-                author = &u.name,
-                src = &self.src,
-                embed_url = &self.embed_url,
-                title = fmt_title(self),
-                text = limit_descr_len(&self.text),
-            )),
-
-            RedditPostType::Video => create_msg.embed(|e| {
+        if self.nsfw {
+            create_msg.embed(|e| {
                 e.title(&fmt_title(self))
-                    .description("[click title to watch video]")
+                    .description("Warning NSFW: Click to view content")
                     .author(|a| a.name(&u.name))
                     .url(&self.src)
-                    .image(&self.embed_url)
-            }),
+            })
+        } else {
+            match self.post_type {
+                RedditPostType::Text => create_msg.embed(|e| base_embed(e, u, self)),
+
+                RedditPostType::Image => create_msg.embed(|e| {
+                    base_embed(e, u, self)
+                        .image(&self.embed_url)
+                }),
+
+                RedditPostType::Video if self.embed_url.ends_with(".gif") => create_msg.content(format!(
+                    ">>> **{author}**\nSource: <{src}>\nEmbedURL: {embed_url}\n\n{title}\n\n{text}",
+                    author = &u.name,
+                    src = &self.src,
+                    embed_url = &self.embed_url,
+                    title = fmt_title(self),
+                    text = limit_descr_len(&self.text),
+                )),
+
+                RedditPostType::Video => create_msg.embed(|e| {
+                    e.title(&fmt_title(self))
+                        .description("Click to watch video")
+                        .author(|a| a.name(&u.name))
+                        .url(&self.src)
+                        .image(&self.embed_url)
+                }),
+            }
         };
     }
 }
@@ -115,7 +125,7 @@ impl PostGrabAPI for RedditAPI {
     fn get_post(&self, url: &str) -> Result<Box<dyn Post>, Error> {
         let json = wget_json(url, USER_AGENT)?;
 
-        let post_json = json
+        let top_level_post = json
             .get(0)?
             .get("data")?
             .get("children")?
@@ -123,7 +133,21 @@ impl PostGrabAPI for RedditAPI {
             .get("data")?
             .as_object()?;
 
-        let title = post_json.get("title")?.as_str()?.to_string();
+        let title = top_level_post.get("title")?
+            .as_str()?
+            .to_string();
+
+        let subreddit = top_level_post.get("subreddit")?
+            .as_str()?
+            .to_string();
+
+        let (is_xpost, post_json)
+            = top_level_post.get("crosspost_parent_list")
+                .and_then(|jval| jval.as_array())
+                .and_then(|vec| vec.get(0))
+                .and_then(|x| x.as_object())
+                .map(|parent| (true, parent))
+                .unwrap_or((false, top_level_post));
 
         let (post_type, embed_url) = match post_json.get("secure_media") {
             Some(Value::Object(sm)) if sm.contains_key("reddit_video")
@@ -143,27 +167,34 @@ impl PostGrabAPI for RedditAPI {
             }
         };
 
-        let subreddit = post_json.get("subreddit")?.as_str()?.to_string();
-        let text = post_json.get("selftext")?.as_str()?.to_string();
+        let original_subreddit = post_json.get("subreddit")?
+            .as_str()?
+            .to_string();
 
-        let flair = match post_json.get("link_flair_text") {
-            Some(Value::String(s)) => s.clone(),
-            _ => String::new(),
-        };
+        let text = post_json.get("selftext")?
+            .as_str()?
+            .to_string();
+
+        let flair = post_json.get("link_flair_text")
+            .and_then(Value::as_str)
+            .map(ToString::to_string)
+            .unwrap_or_default();
 
         let nsfw = post_json.get("over_18")
-            .and_then(|v| v.as_bool())
+            .and_then(Value::as_bool)
             .unwrap_or(false);
 
         Ok(Box::new(RedditPost {
-            src: url.to_string(), // edit remove android sharing stuff
+            src: url.to_string(), // TODO: remove android sharing stuff
             subreddit,
+            original_subreddit,
             title,
             embed_url,
             post_type,
             text,
             flair,
             nsfw,
+            is_xpost,
         }))
     }
 }

@@ -1,4 +1,4 @@
-#![feature(try_trait, bind_by_move_pattern_guards)]
+#![feature(try_trait, bind_by_move_pattern_guards, let_chains, slice_patterns, bool_to_option)]
 
 extern crate serenity;
 
@@ -13,26 +13,6 @@ use post_grab_api::*;
 fn is_url(url: &str) -> bool {
     url.starts_with("http://") || url.starts_with("https://")
 }
-
-
-/*fn send_embed_message(
-    ctx: &Context,
-    msg: &Message,
-    post: &Post,
-) -> Result<Message, serenity::Error> {
-    msg.channel_id.send_message(ctx, |m| {
-        match post.post_type {
-            PostType::Image if !post.nsfw => image_embed(m, msg, post),
-            PostType::Image               => nsfw_embed(m, msg, post),
-            PostType::Text  => text_embed(m, msg, post),
-            PostType::Video if &post.website == "reddit" && post.embed_url.ends_with(".gif") => video_embed(m, msg, post),
-            PostType::Video if &post.website == "reddit" => video_thumbnail_embed(m, msg, post),
-            PostType::Video => video_embed(m, msg, post),
-        }
-
-        m
-    })
-}*/
 
 fn get_post(api: &dyn PostGrabAPI, url: &str) -> Result<Box<dyn Post>, Error> {
 

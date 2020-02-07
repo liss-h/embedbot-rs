@@ -83,34 +83,27 @@ impl PostGrabAPI for NineGagAPI {
             .get("post")?
             .as_object()?;
 
-        let post_type_str = post_json.get("type")?.as_str()?;
-
-        let embed_url = match post_type_str {
-            "Photo" => post_json
+        let (post_type, embed_url) = match post_json.get("type")?.as_str()? {
+            "Photo" => (NineGagPostType::Image, post_json
                 .get("images")?
                 .get("image700")?
                 .get("url")?
-                .as_str()?,
+                .as_str()?
+                .to_string()),
 
             "Animated" => {
                 let imgs = post_json
                     .get("images")?
                     .as_object()?;
 
-                imgs.get("image460svwm")
+                (NineGagPostType::Video, imgs.get("image460svwm")
                         .or(imgs.get("image460sv"))?
                     .get("url")?
                     .as_str()?
+                    .to_string())
             },
 
-            _ => post_json.get("vp9Url")?.as_str()?,
-        }
-        .to_string();
-
-        let post_type = if post_type_str == "Photo" {
-            NineGagPostType::Image
-        } else {
-            NineGagPostType::Video
+            _ => (NineGagPostType::Video, post_json.get("vp9Url")?.as_str()?.to_string()),
         };
 
         Ok(Box::new(NineGagPost {

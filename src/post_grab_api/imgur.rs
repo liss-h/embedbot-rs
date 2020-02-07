@@ -51,7 +51,8 @@ impl PostGrabAPI for ImgurAPI {
 
         let title = {
             let tmp: String = html.select(&title_selector).next()?.text().collect();
-            let beg = tmp.find(|ch: char| !ch.is_whitespace()).unwrap_or(0);
+            let beg = tmp.find(|ch: char| !ch.is_whitespace())
+                .unwrap_or(0);
 
             tmp[beg..(tmp.len() - 8)].to_string()
         };
