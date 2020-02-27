@@ -2,7 +2,6 @@
 
 ## Introduction
 
-> rust port of my python version of this bot (embedbot)
 > This is a discord bot that will embed
 - 9GAG videos  
 - imgur images   
@@ -29,7 +28,7 @@
 
 ## Docker install
 > $ wget https://raw.githubusercontent.com/Clueliss/embedbot-rs/master/Dockerfile  
-> $ docker build .
+> $ docker build .  
 > $ docker run -d -e DISCORD_TOKEN=<YOUR_TOKEN> --name=embedbot <ID_GIVEN_BY_PREV_CMD> 
 
 ## Manual build
