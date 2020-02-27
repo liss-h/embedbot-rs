@@ -11,7 +11,7 @@ fn fmt_title(p: &ImgurPost) -> String {
 }
 
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ImgurPost {
     src: String,
     title: String,
@@ -37,6 +37,7 @@ impl Post for ImgurPost {
 #[derive(Default)]
 pub struct ImgurAPI;
 
+// TODO: fix; probably broken
 impl PostGrabAPI for ImgurAPI {
     fn is_suitable(&self, url: &str) -> bool {
         url.starts_with("https://")

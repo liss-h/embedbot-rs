@@ -15,6 +15,7 @@ pub enum Error {
     JSONParseErr(serde_json::Error),
     JSONNavErr,
     HTTPErr(reqwest::Error),
+    Test
 }
 
 impl From<reqwest::Error> for Error {
@@ -42,7 +43,7 @@ pub trait PostGrabAPI {
 }
 
 
-pub trait Post {
+pub trait Post : std::fmt::Debug {
     fn should_embed(&self) -> bool;
     fn create_embed(&self, u: &User, create_message: &mut CreateMessage);
 }

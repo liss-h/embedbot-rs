@@ -11,13 +11,13 @@ fn fmt_title(p: &NineGagPost) -> String {
 }
 
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub enum NineGagPostType {
     Image,
     Video,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct NineGagPost {
     src: String,
     title: String,

@@ -1,6 +1,7 @@
 use super::*;
 use serde_json::Value;
 use serenity::builder::CreateEmbed;
+use crate::is_url;
 
 
 fn has_image_extension(s: &str) -> bool {
@@ -48,14 +49,14 @@ fn base_embed<'a>(e: &'a mut CreateEmbed, u: &User, post: &RedditPost) -> &'a mu
 }
 
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum RedditPostType {
     Text,
     Image,
     Video
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct RedditPost {
     src: String,
     subreddit: String,
@@ -123,7 +124,7 @@ impl PostGrabAPI for RedditAPI {
     }
 
     fn get_post(&self, url: &str) -> Result<Box<dyn Post>, Error> {
-        let json = wget_json(url, USER_AGENT)?;
+        let json = wget_json(&format!("{}/.json", url), USER_AGENT)?;
 
         let top_level_post = json
             .get(0)?
@@ -141,29 +142,37 @@ impl PostGrabAPI for RedditAPI {
             .as_str()?
             .to_string();
 
+        // post_json is either top_level_post or the original post (in case of crosspost)
         let (is_xpost, post_json)
             = top_level_post.get("crosspost_parent_list")
-                .and_then(|jval| jval.as_array())
-                .and_then(|vec| vec.get(0))
-                .and_then(|x| x.as_object())
+                .and_then(|arr| arr.get(0))
+                .and_then(Value::as_object)
                 .map(|parent| (true, parent))
                 .unwrap_or((false, top_level_post));
 
         let (post_type, embed_url) = match post_json.get("secure_media") {
             Some(Value::Object(sm)) if sm.contains_key("reddit_video")
-                => (RedditPostType::Video, post_json.get("thumbnail")?.as_str()?.to_string()),
+                => (
+                    RedditPostType::Video,
+                    post_json.get("thumbnail")?
+                        .as_str()?
+                        .to_string()
+                ),
 
             Some(Value::Object(sm)) if sm.contains_key("oembed")
-                => (RedditPostType::Image, sm.get("oembed")?.get("thumbnail_url")?.as_str()?.to_string()),
+                => (
+                    RedditPostType::Image,
+                     sm.get("oembed")?
+                         .get("thumbnail_url")?
+                         .as_str()?
+                         .to_string()
+                ),
 
             _ => {
                 let url = post_json.get("url")?.as_str()?.to_string();
 
-                if has_image_extension(&url) {
-                    (RedditPostType::Image, url)
-                } else {
-                    (RedditPostType::Text, url)
-                }
+                if has_image_extension(&url) { (RedditPostType::Image, url) }
+                else { (RedditPostType::Text, url) }
             }
         };
 
@@ -184,12 +193,19 @@ impl PostGrabAPI for RedditAPI {
             .and_then(Value::as_bool)
             .unwrap_or(false);
 
+        // embed_url can be "default" when the original post (referenced by crosspost) is deleted
+        let alt_embed_url = top_level_post.get("thumbnail")
+            .and_then(Value::as_str)
+            .map(ToString::to_string)
+            .map(|s| if is_url(&s) { s } else { String::new() })
+            .unwrap_or_else(Default::default);
+
         Ok(Box::new(RedditPost {
             src: url.to_string(), // TODO: remove android sharing stuff
             subreddit,
             original_subreddit,
             title,
-            embed_url,
+            embed_url: if is_url(&embed_url) { embed_url } else { alt_embed_url },
             post_type,
             text,
             flair,

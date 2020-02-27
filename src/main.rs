@@ -1,4 +1,4 @@
-#![feature(try_trait, bind_by_move_pattern_guards, let_chains, slice_patterns, bool_to_option)]
+#![feature(try_trait, bind_by_move_pattern_guards, slice_patterns, bool_to_option)]
 
 extern crate serenity;
 
@@ -59,7 +59,7 @@ impl EventHandler for EmbedBot {
 
                         msg.delete(context.http).expect("could not delete msg");
 
-                        println!("[Info] embedded '{}'", msg.content);
+                        println!("[Info] embedded '{}': {:?}", msg.content, post);
                     }
                     Ok(_) => println!(
                         "[Info] ignoring '{}'. Reason: not supposed to embed",

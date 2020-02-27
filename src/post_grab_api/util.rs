@@ -3,7 +3,7 @@ use super::Error;
 pub fn wget(url: &str, user_agent: &str) -> Result<reqwest::Response, Error> {
     let client = reqwest::Client::new();
     client
-        .get(&format!("{}/.json", url))
+        .get(url)
         .header("User-Agent", user_agent)
         .send()
         .map_err(|e| e.into())
