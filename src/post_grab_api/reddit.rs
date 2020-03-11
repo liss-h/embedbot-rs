@@ -43,7 +43,7 @@ fn fmt_title(p: &RedditPost) -> String {
 
 fn base_embed<'a>(e: &'a mut CreateEmbed, u: &User, post: &RedditPost) -> &'a mut CreateEmbed {
     e.title(&fmt_title(&post))
-        .description(&limit_descr_len(&format!("{}\n{}", &post.embed_url, &post.text)))
+        .description(&limit_descr_len(&format!("{}", &post.text)))
         .author(|a| a.name(&u.name))
         .url(&post.src)
 }
