@@ -205,7 +205,7 @@ impl PostGrabAPI for RedditAPI {
             .unwrap_or_else(Default::default);
 
         Ok(Box::new(RedditPost {
-            src: url.to_string(), // TODO: remove android sharing stuff
+            src: stripped_url.to_string(),
             subreddit,
             original_subreddit,
             title,
