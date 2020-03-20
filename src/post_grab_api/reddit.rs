@@ -124,7 +124,11 @@ impl PostGrabAPI for RedditAPI {
     }
 
     fn get_post(&self, url: &str) -> Result<Box<dyn Post>, Error> {
-        let json = wget_json(&format!("{}/.json", url), USER_AGENT)?;
+        let stripped_url = url.rfind("/?")
+            .map(|idx| &url[..idx])
+            .unwrap_or(url);
+
+        let json = wget_json(&format!("{}/.json", stripped_url), USER_AGENT)?;
 
         let top_level_post = json
             .get(0)?
