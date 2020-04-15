@@ -1,4 +1,4 @@
-#![feature(try_trait, bind_by_move_pattern_guards, slice_patterns, bool_to_option)]
+#![feature(try_trait, bool_to_option)]
 
 extern crate serenity;
 
