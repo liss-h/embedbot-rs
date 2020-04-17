@@ -1,7 +1,8 @@
-use super::*;
 use serde_json::Value;
 use serenity::builder::CreateEmbed;
-use crate::is_url;
+
+use super::*;
+use crate::embed_bot::is_url;
 
 
 fn has_image_extension(s: &str) -> bool {
@@ -118,7 +119,7 @@ impl Post for RedditPost {
 #[derive(Default)]
 pub struct RedditAPI;
 
-impl PostGrabAPI for RedditAPI {
+impl PostScraper for RedditAPI {
     fn is_suitable(&self, url: &str) -> bool {
         url.starts_with("https://www.reddit.com")
     }

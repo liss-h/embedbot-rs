@@ -52,7 +52,7 @@ impl Post for NineGagPost {
 #[derive(Default)]
 pub struct NineGagAPI;
 
-impl PostGrabAPI for NineGagAPI {
+impl PostScraper for NineGagAPI {
     fn is_suitable(&self, url: &str) -> bool {
         url.starts_with("https://9gag.com")
     }

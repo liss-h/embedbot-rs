@@ -38,7 +38,7 @@ impl Post for ImgurPost {
 pub struct ImgurAPI;
 
 // TODO: fix; probably broken
-impl PostGrabAPI for ImgurAPI {
+impl PostScraper for ImgurAPI {
     fn is_suitable(&self, url: &str) -> bool {
         url.starts_with("https://")
             && url.contains("imgur.com")

@@ -14,8 +14,7 @@ pub const USER_AGENT: &str = "embedbot v0.2";
 pub enum Error {
     JSONParseErr(serde_json::Error),
     JSONNavErr,
-    HTTPErr(reqwest::Error),
-    Test
+    HTTPErr(reqwest::Error)
 }
 
 impl From<reqwest::Error> for Error {
@@ -37,7 +36,7 @@ impl From<serde_json::Error> for Error {
 }
 
 
-pub trait PostGrabAPI {
+pub trait PostScraper {
     fn is_suitable(&self, url: &str) -> bool;
     fn get_post(&self, url: &str) -> Result<Box<dyn Post>, Error>;
 }
