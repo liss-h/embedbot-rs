@@ -18,5 +18,9 @@ cp ./target/release/embedbot-rs /init
 chmod +x /init
 
 rm /update || true
-cp ./update.sh /update
+cp ./deploy/update.sh /update
 chmod +x /update
+
+rm /system-update || true
+cp ./deploy/system-update.sh /system-update
+chmod +x /system-update
