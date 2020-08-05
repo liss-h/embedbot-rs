@@ -49,6 +49,14 @@ fn base_embed<'a>(e: &'a mut CreateEmbed, u: &User, post: &RedditPost) -> &'a mu
         .url(&post.src)
 }
 
+fn strip_url(url: &str) -> &str {
+    let question_mark_pos = url.chars().position(|c| c == '?');
+    match question_mark_pos {
+        Some(pos) => &url[0..pos],
+        None => url
+    }
+}
+
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum RedditPostType {
@@ -93,7 +101,7 @@ impl Post for RedditPost {
                         .image(&self.embed_url)
                 }),
 
-                RedditPostType::Video if self.embed_url.ends_with(".gif") => create_msg.content(format!(
+                RedditPostType::Video => create_msg.content(format!(
                     ">>> **{author}**\nSource: <{src}>\nEmbedURL: {embed_url}\n\n{title}\n\n{text}",
                     author = &u.name,
                     src = &self.src,
@@ -101,14 +109,6 @@ impl Post for RedditPost {
                     title = fmt_title(self),
                     text = limit_descr_len(&self.text),
                 )),
-
-                RedditPostType::Video => create_msg.embed(|e| {
-                    e.title(&fmt_title(self))
-                        .description("Click to watch video")
-                        .author(|a| a.name(&u.name))
-                        .url(&self.src)
-                        .image(&self.embed_url)
-                }),
             }
         };
     }
@@ -159,8 +159,10 @@ impl PostScraper for RedditAPI {
             Some(Value::Object(sm)) if sm.contains_key("reddit_video")
                 => (
                     RedditPostType::Video,
-                    post_json.get("thumbnail")?
-                        .as_str()?
+                    sm.get("reddit_video")?
+                        .get("fallback_url")?
+                        .as_str()
+                        .map(strip_url)?
                         .to_string()
                 ),
 
