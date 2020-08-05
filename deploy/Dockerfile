@@ -11,8 +11,8 @@ RUN sh /tmp/rustup.sh -y --default-toolchain=nightly
 
 RUN git clone https://github.com/Clueliss/embedbot-rs /tmp/embedbot-rs
 
-RUN cp /tmp/embedbot-rs/update.sh /update
-RUN cp /tmp/embedbot-rs/system-update.sh /system-update
+RUN cp /tmp/embedbot-rs/deploy/update.sh /update
+RUN cp /tmp/embedbot-rs/deploy/system-update.sh /system-update
 RUN chmod +x /update
 RUN chmod +x /system-update
 
