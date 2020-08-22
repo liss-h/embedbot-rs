@@ -1,17 +1,36 @@
 #![feature(try_trait, bool_to_option)]
 
 extern crate serenity;
+extern crate clap;
+extern crate serde_json;
 
 mod post_grab_api;
 mod embed_bot;
 
+use clap::Clap;
+
 use serenity::Client;
 
-use embed_bot::EmbedBot;
+use embed_bot::{EmbedBot, Settings};
 use post_grab_api::*;
+use std::fs::File;
+
+#[derive(Clap)]
+struct Opts {
+    #[clap(short = "s", long = "settings-file")]
+    settings_file: String,
+}
+
+
 
 fn main() {
-    let mut embedbot = EmbedBot::new();
+    let opts: Opts = Opts::parse();
+
+    let settings: Settings = File::open(&opts.settings_file)
+        .map(|f| serde_json::from_reader(f).unwrap())
+        .unwrap_or_default();
+
+    let mut embedbot = EmbedBot::new(&opts.settings_file, settings);
 
     embedbot.register_api(reddit::RedditAPI::default());
     embedbot.register_api(ninegag::NineGagAPI::default());

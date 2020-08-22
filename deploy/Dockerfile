@@ -18,4 +18,4 @@ RUN chmod +x /system-update
 
 RUN /update
 
-CMD ["/init"]
+CMD ["/init", "--settings-file", "/etc/embedbot.conf"]
