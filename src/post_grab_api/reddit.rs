@@ -32,7 +32,7 @@ fn fmt_title(p: &RedditPost) -> String {
         RedditPostOrigin::Crossposted { from, to } => {
             let title = limit_len(
                 &escape_markdown(&p.common.title),
-                EMBED_TITLE_MAX_LEN - 34 - 18 - to.len() - flair.len() - from.len()); // -34 for formatting
+                EMBED_TITLE_MAX_LEN - 34 - 18 - to.len() - flair.len() - from.len()); // -34-18 for formatting
 
             format!("'{title}' {flair}- **reddit.com/r/{subreddit}\n[XPosted from r/{from}]**",
                     title = title,
