@@ -1,22 +1,17 @@
-FROM docker.io/fedora
+FROM rustlang/rust:nightly-stretch-slim AS builder
+WORKDIR /usr/src/embedbot-rs
+COPY ./Cargo.toml ./
+COPY ./src ./src
+RUN apt update && apt install pkg-config libssl-dev -y
+RUN cargo build --release
+
+
+FROM debian:stretch-slim
 
 ENV DISCORD_TOKEN=YOUR_DISCORD_TOKEN_HERE
-ENV PATH="/root/.cargo/bin:${PATH}"
 
-RUN dnf update --refresh -y
-RUN dnf install gcc git openssl-devel -y
+RUN apt update && apt install libssl-dev -y
+COPY --from=builder /usr/src/embedbot-rs/target/release/embedbot-rs /usr/local/bin/
+RUN chmod +x /usr/local/bin/embedbot-rs
 
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > /tmp/rustup.sh
-RUN sh /tmp/rustup.sh -y --default-toolchain=nightly
-
-RUN mkdir /tmp/embedbot-rs
-COPY . /tmp/embedbot-rs
-
-RUN cp /tmp/embedbot-rs/deploy/update.sh /update
-RUN cp /tmp/embedbot-rs/deploy/system-update.sh /system-update
-RUN chmod +x /update
-RUN chmod +x /system-update
-
-RUN /update
-
-CMD ["/init", "--settings-file", "/etc/embedbot.conf"]
+CMD ["/usr/local/bin/embedbot-rs", "--settings-file", "/etc/embedbot.conf"]

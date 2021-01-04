@@ -1,9 +1,8 @@
-version: "3"
+version: "3.3"
 services:
     embed_bot:
         build: .
         volumes:
             - ./embedbot.conf:/etc/embedbot.conf
         environment:
-            - PATH=/root/.cargo/bin:$PATH
             - DISCORD_TOKEN=

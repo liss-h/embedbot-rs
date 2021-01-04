@@ -17,7 +17,7 @@ use std::fs::File;
 
 #[derive(Clap)]
 struct Opts {
-    #[clap(short = "s", long = "settings-file")]
+    #[clap(short = 's', long = "settings-file")]
     settings_file: String,
 }
 
