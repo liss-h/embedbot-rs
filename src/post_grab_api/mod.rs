@@ -1,12 +1,12 @@
 use serenity::builder::CreateMessage;
 use serenity::model::user::User;
 
+pub use util::*;
+
 pub mod ninegag;
 pub mod reddit;
 pub mod imgur;
 pub mod util;
-
-pub use util::*;
 
 pub const USER_AGENT: &str = "embedbot v0.2";
 

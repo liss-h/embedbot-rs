@@ -15,11 +15,20 @@ use embed_bot::{EmbedBot, Settings};
 use post_grab_api::*;
 use std::fs::File;
 
+#[cfg(unix)]
 #[derive(Clap)]
 struct Opts {
     #[clap(short = 's', long = "settings-file")]
     settings_file: String,
 }
+
+#[cfg(windows)]
+#[derive(Clap)]
+struct Opts {
+    #[clap(short = "s", long = "settings-file")]
+    settings_file: String,
+}
+
 
 
 
