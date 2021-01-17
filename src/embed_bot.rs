@@ -8,8 +8,8 @@ use super::post_grab_api::*;
 use std::fs::File;
 use std::path::{PathBuf, Path};
 
-const SETTINGS_CHOICES: [&'static str; 2] = ["prefix", "do-implicit-auto-embed"];
-const SETTINGS_CHOICES_DESCR: [&'static str; 2] = [":exclamation: prefix", ":envelope: do-implicit-auto-embed"];
+const SETTINGS_CHOICES: [&str; 2] = ["prefix", "do-implicit-auto-embed"];
+const SETTINGS_CHOICES_DESCR: [&str; 2] = [":exclamation: prefix", ":envelope: do-implicit-auto-embed"];
 
 
 pub fn is_url(url: &str) -> bool {
@@ -21,7 +21,7 @@ fn get_post(api: &dyn PostScraper, url: &str) -> Result<Box<dyn Post>, Error> {
 
     match api.get_post(url) {
         Ok(post) => Ok(post),
-        Err(_) if url.ends_with("#") => get_post(api, url.trim_end_matches("#")),
+        Err(_) if url.ends_with('#') => get_post(api, url.trim_end_matches('#')),
         Err(e) => Err(e)
     }
 }
@@ -114,7 +114,7 @@ impl EmbedBot {
         };
 
 
-        if args.len() == 0 {
+        if args.is_empty() {
             msg.channel_id
                 .send_message(&ctx, |m| {
                     m.embed(|e| {
@@ -131,44 +131,42 @@ impl EmbedBot {
                         e
                     })
                 }).unwrap();
-        } else {
-            if args.len() == 2 {
-                let ok = if args[0] == SETTINGS_CHOICES[0] {
-                    // prefix
-                    settings.prefix = args[1].to_string();
-                    reply_sucess(&format!("prefix is now '{}'", settings.prefix));
-                    Ok(())
-                } else if args[0] == SETTINGS_CHOICES[1] {
-                    // implicit-auto-embed
+        } else if args.len() == 2 {
+            let ok = if args[0] == SETTINGS_CHOICES[0] {
+                // prefix
+                settings.prefix = args[1].to_string();
+                reply_sucess(&format!("prefix is now '{}'", settings.prefix));
+                Ok(())
+            } else if args[0] == SETTINGS_CHOICES[1] {
+                // implicit-auto-embed
 
-                    match args[1].parse::<bool>() {
-                        Ok(value) => {
-                            settings.do_implicit_auto_embed = value;
+                match args[1].parse::<bool>() {
+                    Ok(value) => {
+                        settings.do_implicit_auto_embed = value;
 
-                            if value {
-                                reply_sucess("bot will now autoembed");
-                            } else {
-                                reply_sucess("bot will no longer autoembed");
-                            }
-                            Ok(())
-                        },
-                        Err(_) => {
-                            reply_err("expected boolean");
-                            Err(())
+                        if value {
+                            reply_sucess("bot will now autoembed");
+                        } else {
+                            reply_sucess("bot will no longer autoembed");
                         }
+                        Ok(())
+                    },
+                    Err(_) => {
+                        reply_err("expected boolean");
+                        Err(())
                     }
-                } else {
-                    reply_err("invalid setting");
-                    Err(())
-                };
-
-                if ok.is_ok() {
-                    let f = File::create(&self.settings_path).unwrap();
-                    serde_json::to_writer(f, &settings).unwrap();
                 }
             } else {
-                reply_err("required exactly 1 arg");
+                reply_err("invalid setting");
+                Err(())
+            };
+
+            if ok.is_ok() {
+                let f = File::create(&self.settings_path).unwrap();
+                serde_json::to_writer(f, &settings).unwrap();
             }
+        } else {
+            reply_err("required exactly 1 arg");
         }
     }
 }
@@ -180,14 +178,14 @@ impl EventHandler for EmbedBot {
         if !msg.author.bot {
 
             let mut settings = self.settings.lock();
-            let commandline = &msg.content[settings.prefix.len()..].split(" ")
+            let commandline = &msg.content[settings.prefix.len()..].split(' ')
                 .collect::<Vec<&str>>();
 
             let cmd = commandline[0];
             let args = &commandline[1..];
 
             if msg.content.starts_with(&settings.prefix) {
-                if commandline.len() == 0 {
+                if commandline.is_empty() {
                     msg.channel_id
                         .send_message(&ctx, |m| m.content("Error: expected command"))
                         .unwrap();

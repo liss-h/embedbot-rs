@@ -6,7 +6,7 @@ use crate::embed_bot::is_url;
 
 
 fn has_image_extension(s: &str) -> bool {
-    const EXTENSIONS: [&'static str; 11] = [
+    const EXTENSIONS: [&str; 11] = [
         ".jpg",
         ".png",
         ".gif",
@@ -60,7 +60,7 @@ fn fmt_title(p: &RedditPost) -> String {
 
 fn base_embed<'a>(e: &'a mut CreateEmbed, u: &User, post: &RedditPost) -> &'a mut CreateEmbed {
     e.title(&fmt_title(&post))
-        .description(&limit_descr_len(&format!("{}", &post.common.text)))
+        .description(&limit_descr_len(&post.common.text))
         .author(|a| a.name(&u.name))
         .url(&post.common.src)
 }

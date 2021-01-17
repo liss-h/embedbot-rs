@@ -97,7 +97,7 @@ impl PostScraper for NineGagAPI {
                     .as_object()?;
 
                 (NineGagPostType::Video, imgs.get("image460svwm")
-                        .or(imgs.get("image460sv"))?
+                    .or_else(|| imgs.get("image460sv"))?
                     .get("url")?
                     .as_str()?
                     .to_string())
