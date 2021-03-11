@@ -1,19 +1,23 @@
-#![feature(try_trait, bool_to_option)]
+#![feature(try_trait, bool_to_option, async_closure)]
 
-extern crate serenity;
+extern crate async_trait;
 extern crate clap;
 extern crate serde_json;
+extern crate serenity;
+extern crate strum;
+extern crate tokio;
+
+use std::fs::File;
+
+use clap::Clap;
+use serenity::Client;
+
+use post_grab_api::*;
+
+use crate::embed_bot::{EmbedBot, Settings};
 
 mod post_grab_api;
 mod embed_bot;
-
-use clap::Clap;
-
-use serenity::Client;
-
-use embed_bot::{EmbedBot, Settings};
-use post_grab_api::*;
-use std::fs::File;
 
 #[cfg(unix)]
 #[derive(Clap)]
@@ -31,24 +35,32 @@ struct Opts {
 
 
 
-
-fn main() {
+#[tokio::main]
+async fn main() {
     let opts: Opts = Opts::parse();
 
     let settings: Settings = File::open(&opts.settings_file)
         .map(|f| serde_json::from_reader(f).unwrap())
         .unwrap_or_default();
 
-    let mut embedbot = EmbedBot::new(&opts.settings_file, settings);
-
-    embedbot.register_api(reddit::RedditAPI::default());
-    embedbot.register_api(ninegag::NineGagAPI::default());
-    embedbot.register_api(imgur::ImgurAPI::default());
-
     let tok = std::env::var("DISCORD_TOKEN").expect("ENVVAR 'DISCORD_TOKEN' not found");
-    let mut client = Client::new(&tok, embedbot).expect("could not create discord client");
 
-    if let Err(e) = client.start() {
+    let embed_bot = {
+        let mut e = EmbedBot::new(&opts.settings_file);
+        e.register_api(reddit::RedditAPI::default());
+        e.register_api(ninegag::NineGagAPI::default());
+        e.register_api(imgur::ImgurAPI::default());
+
+        e
+    };
+
+    let mut client = Client::builder(&tok)
+        .event_handler(embed_bot)
+        .type_map_insert::<Settings>(settings)
+        .await
+        .expect("could not create client");
+
+    if let Err(e) = client.start().await {
         eprintln!("[Error] Client Err: {:?}", e);
     }
 }

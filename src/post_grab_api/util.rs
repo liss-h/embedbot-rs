@@ -1,22 +1,26 @@
 use super::Error;
 
-pub fn wget(url: &str, user_agent: &str) -> Result<reqwest::Response, Error> {
+pub async fn wget(url: &str, user_agent: &str) -> Result<reqwest::Response, Error> {
     let client = reqwest::Client::new();
     client
         .get(url)
         .header("User-Agent", user_agent)
         .send()
-        .map_err(|e| e.into())
+        .await
+        .map_err(Into::into)
 }
 
-pub fn wget_html(url: &str, user_agent: &str) -> Result<scraper::Html, Error> {
-    let mut resp = wget(url, user_agent)?;
-    Ok(scraper::Html::parse_document(&resp.text()?))
+pub async fn wget_html(url: &str, user_agent: &str) -> Result<scraper::Html, Error> {
+    let resp = wget(url, user_agent).await?;
+    Ok(scraper::Html::parse_document(&resp.text().await?))
 }
 
-pub fn wget_json(url: &str, user_agent: &str) -> Result<serde_json::Value, Error> {
-    let mut resp = wget(url, user_agent)?;
-    resp.json().map_err(|e| e.into())
+pub async fn wget_json(url: &str, user_agent: &str) -> Result<serde_json::Value, Error> {
+    wget(url, user_agent)
+        .await?
+        .json()
+        .await
+        .map_err(Into::into)
 }
 
 

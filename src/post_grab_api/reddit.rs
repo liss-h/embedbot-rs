@@ -3,7 +3,7 @@ use serenity::builder::CreateEmbed;
 
 use super::*;
 use crate::embed_bot::is_url;
-
+use async_trait::async_trait;
 
 fn has_image_extension(s: &str) -> bool {
     const EXTENSIONS: [&str; 11] = [
@@ -58,11 +58,31 @@ fn fmt_title(p: &RedditPost) -> String {
 }
 
 
-fn base_embed<'a>(e: &'a mut CreateEmbed, u: &User, post: &RedditPost) -> &'a mut CreateEmbed {
+fn base_embed<'a>(e: &'a mut CreateEmbed, u: &User, comment: Option<&str>, post: &RedditPost) -> &'a mut CreateEmbed {
     e.title(&fmt_title(&post))
         .description(&limit_descr_len(&post.common.text))
         .author(|a| a.name(&u.name))
-        .url(&post.common.src)
+        .url(&post.common.src);
+
+    if let Some(comment) = comment {
+        include_author_comment(e, u, comment);
+    }
+
+    if let Some(comment) = &post.common.comment {
+        include_comment(e, comment);
+    }
+
+    e
+}
+
+fn include_comment<'a>(e: &'a mut CreateEmbed, comment: &RedditComment) -> &'a mut CreateEmbed {
+    let name = format!("Comment by Reddit User '{author}'", author=comment.author);
+    e.field(name, &comment.body, true)
+}
+
+fn include_author_comment<'a>(e: &'a mut CreateEmbed, u: &User, comment: &str) -> &'a mut CreateEmbed {
+    let title = format!("Comment by {author}", author=u.name);
+    e.field(title, comment, false)
 }
 
 fn strip_url(url: &str) -> &str {
@@ -73,8 +93,15 @@ fn strip_url(url: &str) -> &str {
     }
 }
 
-fn sanitize_url(url: &str) -> String {
+fn unescape_url(url: &str) -> String {
     url.replace("&amp;", "&")
+}
+
+fn unescape_html(html: &str) -> String {
+    html.replace("&amp;", "&")
+        .replace("&gt;", ">")
+        .replace("&lt;", "<")
+        .replace("&quot;", "\"")
 }
 
 
@@ -88,13 +115,27 @@ pub enum RedditPostOrigin {
 }
 
 #[derive(Clone, Debug)]
+pub struct RedditComment {
+    author: String,
+    body: String,
+}
+
+#[derive(Clone, Debug)]
+pub enum RedditPostShowMode {
+    Default,
+    Nsfw,
+    Spoiler
+}
+
+#[derive(Clone, Debug)]
 pub struct RedditPostCommonData {
     src: String,
     subreddit: RedditPostOrigin,
     title: String,
     text: String,
     flair: String,
-    nsfw: bool
+    show_mode: RedditPostShowMode,
+    comment: Option<RedditComment>
 }
 
 #[derive(Clone, Debug)]
@@ -123,41 +164,85 @@ impl Post for RedditPost {
         true
     }
 
-    fn create_embed(&self, u: &User, create_msg: &mut CreateMessage) {
-        if self.common.nsfw {
-            create_msg.embed(|e| {
+    fn create_embed(&self, u: &User, comment: Option<&str>, create_msg: &mut CreateMessage) {
+        match self.common.show_mode {
+            RedditPostShowMode::Nsfw => create_msg.embed(|e| {
                 e.title(&fmt_title(self))
                     .description("Warning NSFW: Click to view content")
                     .author(|a| a.name(&u.name))
-                    .url(&self.common.src)
-            })
-        } else {
-            match &self.specialized {
-                RedditPostSpecializedData::Text => create_msg.embed(|e| base_embed(e, u, self)),
+                    .url(&self.common.src);
+
+                if let Some(comment) = comment {
+                    include_author_comment(e, u, comment);
+                }
+
+                e
+            }),
+            RedditPostShowMode::Spoiler => create_msg.embed(|e| {
+                e.title(&fmt_title(self))
+                    .description("Spoiler: Click to view content")
+                    .author(|a| a.name(&u.name))
+                    .url(&self.common.src);
+
+                if let Some(comment) = comment {
+                    include_author_comment(e, u, comment);
+                }
+
+                if let Some(comment) = &self.common.comment {
+                    include_comment(e, comment);
+                }
+
+                e
+            }),
+
+            RedditPostShowMode::Default => match &self.specialized {
+                RedditPostSpecializedData::Text => create_msg.embed(|e| base_embed(e, u, comment, self)),
                 RedditPostSpecializedData::Image { img_url } => {
-                    create_msg.embed(|e| base_embed(e, u, self)
+                    create_msg.embed(|e| base_embed(e, u, comment, self)
                         .image(&img_url))
                 },
                 RedditPostSpecializedData::Gallery { img_urls } => {
-                    let urls = img_urls.iter().fold(String::new(), |acc, url| acc + url + "\n");
+                    let urls = img_urls.join("\n");
 
-                    create_msg.content(format!(
-                        ">>> **{author}**\nSource: <{src}>\nEmbedURLs:\n{embed_url}\n{title}\n\n{text}",
+                    match comment {
+                        Some(comment) => create_msg.content(format!(
+                            ">>> **{author}**\nSource: <{src}>\nEmbedURLs:\n{embed_url}\n\n**Comment by {author}**\n{comment}\n\n{title}\n\n{text}",
+                            author = &u.name,
+                            comment = comment,
+                            src = &self.common.src,
+                            embed_url = &urls,
+                            title = fmt_title(self),
+                            text = limit_descr_len(&self.common.text),
+                        )),
+                        None => create_msg.content(format!(
+                            ">>> **{author}**\n\nSource: <{src}>\nEmbedURLs:\n{embed_url}\n{title}\n\n{text}",
+                            author = &u.name,
+                            src = &self.common.src,
+                            embed_url = &urls,
+                            title = fmt_title(self),
+                            text = limit_descr_len(&self.common.text),
+                        )),
+                    }
+                },
+                RedditPostSpecializedData::Video { video_url } => match comment {
+                    Some(comment) => create_msg.content(format!(
+                        ">>> **{author}**\nSource: <{src}>\nEmbedURL: {embed_url}\n\n**Comment By {author}**\n{comment}\n\n{title}\n\n{text}",
                         author = &u.name,
+                        comment = comment,
                         src = &self.common.src,
-                        embed_url = &urls,
+                        embed_url = video_url,
                         title = fmt_title(self),
                         text = limit_descr_len(&self.common.text),
-                    ))
-                },
-                RedditPostSpecializedData::Video { video_url } => create_msg.content(format!(
-                    ">>> **{author}**\nSource: <{src}>\nEmbedURL: {embed_url}\n\n{title}\n\n{text}",
-                    author = &u.name,
-                    src = &self.common.src,
-                    embed_url = video_url,
-                    title = fmt_title(self),
-                    text = limit_descr_len(&self.common.text),
-                ))
+                    )),
+                    None => create_msg.content(format!(
+                        ">>> **{author}**\nSource: <{src}>\nEmbedURL: {embed_url}\n\n{title}\n\n{text}",
+                        author = &u.name,
+                        src = &self.common.src,
+                        embed_url = video_url,
+                        title = fmt_title(self),
+                        text = limit_descr_len(&self.common.text),
+                    )),
+                }
             }
         };
     }
@@ -168,17 +253,18 @@ impl Post for RedditPost {
 #[derive(Default)]
 pub struct RedditAPI;
 
+#[async_trait]
 impl PostScraper for RedditAPI {
     fn is_suitable(&self, url: &str) -> bool {
         url.starts_with("https://www.reddit.com")
     }
 
-    fn get_post(&self, url: &str) -> Result<Box<dyn Post>, Error> {
+    async fn get_post(&self, url: &str) -> Result<Box<dyn Post>, Error> {
         let url = url.rfind("/?")
             .map(|idx| &url[..idx])
             .unwrap_or(url);
 
-        let json = wget_json(&format!("{}/.json", url), USER_AGENT)?;
+        let json = wget_json(&format!("{}/.json", url), USER_AGENT).await?;
 
         let top_level_post = json
             .get(0)?
@@ -208,9 +294,7 @@ impl PostScraper for RedditAPI {
             .as_str()?
             .to_string();
 
-        let text = post_json.get("selftext")?
-            .as_str()?
-            .to_string();
+        let text = unescape_html(post_json.get("selftext")?.as_str()?);
 
         let flair = post_json.get("link_flair_text")
             .and_then(Value::as_str)
@@ -221,17 +305,47 @@ impl PostScraper for RedditAPI {
             .and_then(Value::as_bool)
             .unwrap_or(false);
 
+        let spoiler = post_json.get("spoiler")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+
+        let comment = {
+            let comment_json = json.get(1)
+                .and_then(|j| j.get("data"))
+                .and_then(|j| j.get("children"))
+                .and_then(|j| j.get(0))
+                .and_then(|j| j.get("data"));
+
+            match comment_json {
+                Some(comment) if url.ends_with(comment.get("id")?.as_str()?) => Some(RedditComment {
+                    author: comment.get("author")?.as_str()?.to_owned(),
+                    body: comment.get("body")?.as_str()?.to_owned(),
+                }),
+                _ => None,
+            }
+        };
+
         let common_data = RedditPostCommonData {
             src: url.to_string(),
+
             subreddit: if is_xpost {
                 RedditPostOrigin::Crossposted { from: original_subreddit, to: subreddit }
             } else {
                 RedditPostOrigin::JustSubreddit(subreddit)
             },
+
+            show_mode: if nsfw {
+                RedditPostShowMode::Nsfw
+            } else if spoiler {
+                RedditPostShowMode::Spoiler
+            } else {
+                RedditPostShowMode::Default
+            },
+
             title,
             text,
             flair,
-            nsfw
+            comment
         };
 
 
@@ -262,7 +376,7 @@ impl PostScraper for RedditAPI {
                                     .and_then(Value::as_object)
                                     .and_then(|inner| inner.get("u"))
                                     .and_then(Value::as_str)
-                                    .map(sanitize_url)
+                                    .map(unescape_url)
                             }).collect::<Option<Vec<_>>>()?
                     }
                 },

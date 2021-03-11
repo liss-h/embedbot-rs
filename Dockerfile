@@ -1,8 +1,8 @@
 FROM rustlang/rust:nightly-stretch-slim AS builder
+RUN apt update && apt install pkg-config libssl-dev -y
 WORKDIR /usr/src/embedbot-rs
 COPY ./Cargo.toml ./
 COPY ./src ./src
-RUN apt update && apt install pkg-config libssl-dev -y
 RUN cargo build --release
 
 

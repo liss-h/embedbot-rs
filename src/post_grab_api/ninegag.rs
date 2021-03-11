@@ -30,7 +30,7 @@ impl Post for NineGagPost {
         self.post_type != NineGagPostType::Image
     }
 
-    fn create_embed(&self, u: &User, create_msg: &mut CreateMessage) {
+    fn create_embed(&self, u: &User, _comment: Option<&str>, create_msg: &mut CreateMessage) {
         match self.post_type {
             NineGagPostType::Image => create_msg.embed(|e| {
                 e.title(&self.title)
@@ -52,13 +52,14 @@ impl Post for NineGagPost {
 #[derive(Default)]
 pub struct NineGagAPI;
 
+#[async_trait::async_trait]
 impl PostScraper for NineGagAPI {
     fn is_suitable(&self, url: &str) -> bool {
         url.starts_with("https://9gag.com")
     }
 
-    fn get_post(&self, url: &str) -> Result<Box<dyn Post>, Error> {
-        let html = wget_html(url, USER_AGENT)?;
+    async fn get_post(&self, url: &str) -> Result<Box<dyn Post>, Error> {
+        let html = wget_html(url, USER_AGENT).await?;
 
         let title: String = {
             let title_selector = scraper::Selector::parse("title").unwrap();

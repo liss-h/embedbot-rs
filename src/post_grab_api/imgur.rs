@@ -1,5 +1,5 @@
 use super::*;
-
+use async_trait::async_trait;
 use scraper::selector::Selector;
 
 fn fmt_title(p: &ImgurPost) -> String {
@@ -23,7 +23,7 @@ impl Post for ImgurPost {
         true
     }
 
-    fn create_embed<'a>(&self, u: &User, create_msg: &mut CreateMessage) {
+    fn create_embed<'a>(&self, u: &User, _comment: Option<&str>, create_msg: &mut CreateMessage) {
         create_msg.embed(|e| {
             e.title(&fmt_title(self))
                 .author(|a| a.name(&u.name))
@@ -38,14 +38,15 @@ impl Post for ImgurPost {
 pub struct ImgurAPI;
 
 // TODO: fix; probably broken
+#[async_trait]
 impl PostScraper for ImgurAPI {
     fn is_suitable(&self, url: &str) -> bool {
         url.starts_with("https://")
             && url.contains("imgur.com")
     }
 
-    fn get_post(&self, url: &str) -> Result<Box<dyn Post>, Error> {
-        let html = wget_html(url, USER_AGENT)?;
+    async fn get_post(&self, url: &str) -> Result<Box<dyn Post>, Error> {
+        let html = wget_html(url, USER_AGENT).await?;
 
         let title_selector = Selector::parse("title").unwrap();
         let img_selector = Selector::parse(r#"link[rel="image_src"]"#).unwrap();
