@@ -44,7 +44,7 @@ impl TypeMapKey for Settings {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
-            prefix: "*".to_string(),
+            prefix: "~".to_string(),
             do_implicit_auto_embed: true,
         }
     }
