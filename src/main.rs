@@ -1,10 +1,13 @@
-#![feature(try_trait, bool_to_option, async_closure)]
+#![feature(try_trait, bool_to_option)]
 
-extern crate async_trait;
 extern crate clap;
+extern crate reqwest;
+extern crate scraper;
+extern crate serde;
 extern crate serde_json;
 extern crate serenity;
 extern crate strum;
+extern crate thiserror;
 extern crate tokio;
 
 use std::fs::File;
@@ -16,24 +19,14 @@ use post_grab_api::*;
 
 use crate::embed_bot::{EmbedBot, Settings};
 
-mod post_grab_api;
 mod embed_bot;
+mod post_grab_api;
 
-#[cfg(unix)]
 #[derive(Clap)]
 struct Opts {
     #[clap(short = 's', long = "settings-file")]
     settings_file: String,
 }
-
-#[cfg(windows)]
-#[derive(Clap)]
-struct Opts {
-    #[clap(short = "s", long = "settings-file")]
-    settings_file: String,
-}
-
-
 
 #[tokio::main]
 async fn main() {

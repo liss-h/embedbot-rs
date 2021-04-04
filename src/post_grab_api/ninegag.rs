@@ -1,15 +1,13 @@
-use super::*;
+use serenity::async_trait;
 use serenity::model::user::User;
 
+use super::*;
 
 fn fmt_title(p: &NineGagPost) -> String {
-    let title = limit_len(
-        &escape_markdown(&p.title),
-        EMBED_TITLE_MAX_LEN - 12); // -12 for formatting
+    let title = limit_len(&escape_markdown(&p.title), EMBED_TITLE_MAX_LEN - 12); // -12 for formatting
 
     format!("'{}' - **9GAG**", title)
 }
-
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub enum NineGagPostType {
@@ -32,27 +30,24 @@ impl Post for NineGagPost {
 
     fn create_embed(&self, u: &User, _comment: Option<&str>, create_msg: &mut CreateMessage) {
         match self.post_type {
-            NineGagPostType::Image => create_msg.embed(|e| {
-                e.title(&self.title)
-                    .url(&self.src)
-                    .image(&self.embed_url)
-            }),
+            NineGagPostType::Image => {
+                create_msg.embed(|e| e.title(&self.title).url(&self.src).image(&self.embed_url))
+            }
             NineGagPostType::Video => create_msg.content(format!(
                 ">>> **{author}**\nSource: <{src}>\nEmbedURL: {embed_url}\n\n{title}",
                 author = u.name,
                 src = &self.src,
                 embed_url = self.embed_url,
                 title = fmt_title(self),
-            ))
+            )),
         };
     }
 }
 
-
 #[derive(Default)]
 pub struct NineGagAPI;
 
-#[async_trait::async_trait]
+#[async_trait]
 impl PostScraper for NineGagAPI {
     fn is_suitable(&self, url: &str) -> bool {
         url.starts_with("https://9gag.com")
@@ -79,32 +74,36 @@ impl PostScraper for NineGagAPI {
             serde_json::from_str(&script_text[29..(script_text.len() - 3)])?
         };
 
-        let post_json = build_json
-            .get("data")?
-            .get("post")?
-            .as_object()?;
+        let post_json = build_json.get("data")?.get("post")?.as_object()?;
 
         let (post_type, embed_url) = match post_json.get("type")?.as_str()? {
-            "Photo" => (NineGagPostType::Image, post_json
-                .get("images")?
-                .get("image700")?
-                .get("url")?
-                .as_str()?
-                .to_string()),
-
-            "Animated" => {
-                let imgs = post_json
+            "Photo" => (
+                NineGagPostType::Image,
+                post_json
                     .get("images")?
-                    .as_object()?;
-
-                (NineGagPostType::Video, imgs.get("image460svwm")
-                    .or_else(|| imgs.get("image460sv"))?
+                    .get("image700")?
                     .get("url")?
                     .as_str()?
-                    .to_string())
-            },
+                    .to_string(),
+            ),
 
-            _ => (NineGagPostType::Video, post_json.get("vp9Url")?.as_str()?.to_string()),
+            "Animated" => {
+                let imgs = post_json.get("images")?.as_object()?;
+
+                (
+                    NineGagPostType::Video,
+                    imgs.get("image460svwm")
+                        .or_else(|| imgs.get("image460sv"))?
+                        .get("url")?
+                        .as_str()?
+                        .to_string(),
+                )
+            }
+
+            _ => (
+                NineGagPostType::Video,
+                post_json.get("vp9Url")?.as_str()?.to_string(),
+            ),
         };
 
         Ok(Box::new(NineGagPost {

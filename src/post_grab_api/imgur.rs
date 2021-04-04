@@ -1,15 +1,12 @@
 use super::*;
-use async_trait::async_trait;
 use scraper::selector::Selector;
+use serenity::async_trait;
 
 fn fmt_title(p: &ImgurPost) -> String {
-    let title = limit_len(
-        &escape_markdown(&p.title),
-        EMBED_TITLE_MAX_LEN - 14); // -14 for formatting
+    let title = limit_len(&escape_markdown(&p.title), EMBED_TITLE_MAX_LEN - 14); // -14 for formatting
 
     format!("'{}' - **imgur**", title)
 }
-
 
 #[derive(Clone, Debug)]
 pub struct ImgurPost {
@@ -33,7 +30,6 @@ impl Post for ImgurPost {
     }
 }
 
-
 #[derive(Default)]
 pub struct ImgurAPI;
 
@@ -41,8 +37,7 @@ pub struct ImgurAPI;
 #[async_trait]
 impl PostScraper for ImgurAPI {
     fn is_suitable(&self, url: &str) -> bool {
-        url.starts_with("https://")
-            && url.contains("imgur.com")
+        url.starts_with("https://") && url.contains("imgur.com")
     }
 
     async fn get_post(&self, url: &str) -> Result<Box<dyn Post>, Error> {
@@ -53,8 +48,7 @@ impl PostScraper for ImgurAPI {
 
         let title = {
             let tmp: String = html.select(&title_selector).next()?.text().collect();
-            let beg = tmp.find(|ch: char| !ch.is_whitespace())
-                .unwrap_or(0);
+            let beg = tmp.find(|ch: char| !ch.is_whitespace()).unwrap_or(0);
 
             tmp[beg..(tmp.len() - 8)].to_string()
         };

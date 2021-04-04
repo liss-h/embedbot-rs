@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use clap::{AppSettings, Clap};
-use strum::{EnumVariantNames, VariantNames};
+use strum::{AsStaticStr, EnumVariantNames, VariantNames};
 
 enum SplitState {
     Default,
@@ -13,35 +13,33 @@ fn strip_quotes(s: &str) -> &str {
 
     for &q in &QUOTES {
         if s.starts_with(q) && s.ends_with(q) {
-            return &s[1..(s.len()-1)];
+            return &s[1..(s.len() - 1)];
         }
     }
 
     s
 }
 
-pub fn command_line_split(cmdl: &str) -> impl Iterator<Item=&str> {
+pub fn command_line_split(cmdl: &str) -> impl Iterator<Item = &str> {
     let mut state = SplitState::Default;
 
-    cmdl.split(move |ch| {
-        match state {
-            SplitState::Default => match ch {
-                ' ' => true,
-                '\'' | '"' => {
-                    state = SplitState::InQuotes(ch);
-                    false
-                },
-                _ => false
-            },
-            SplitState::InQuotes(quot) => {
-                if ch == quot {
-                    state = SplitState::Default;
-                }
+    cmdl.split(move |ch| match state {
+        SplitState::Default => match ch {
+            ' ' => true,
+            '\'' | '"' => {
+                state = SplitState::InQuotes(ch);
                 false
             }
+            _ => false,
+        },
+        SplitState::InQuotes(quot) => {
+            if ch == quot {
+                state = SplitState::Default;
+            }
+            false
         }
     })
-        .map(strip_quotes)
+    .map(strip_quotes)
 }
 
 #[derive(Clap, Debug)]
@@ -51,29 +49,22 @@ pub enum EmbedBotOpts {
     Embed {
         url: String,
 
-        #[clap(short = "c", long = "comment")]
+        #[clap(short = 'c', long = "comment")]
         comment: Option<String>,
-    }
+    },
 }
 
 #[derive(Clap, Debug)]
 pub enum SettingsSubcommand {
-    Set {
-        key: SettingsOptions,
-        value: String,
-    },
-    Get {
-        key: SettingsOptions
-    },
+    Set { key: SettingsOptions, value: String },
+    Get { key: SettingsOptions },
 }
 
-
-#[derive(Clap, Debug, EnumVariantNames)]
+#[derive(Clap, Debug, EnumVariantNames, AsStaticStr)]
 pub enum SettingsOptions {
     DoImplicitAutoEmbed,
-    Prefix
+    Prefix,
 }
-
 
 impl FromStr for SettingsOptions {
     type Err = String;
@@ -82,7 +73,10 @@ impl FromStr for SettingsOptions {
         match s {
             "DoImplicitAutoEmbed" => Ok(SettingsOptions::DoImplicitAutoEmbed),
             "Prefix" => Ok(SettingsOptions::Prefix),
-            _ => Err(format!("settings option must be in {:?}", SettingsOptions::VARIANTS))
+            _ => Err(format!(
+                "settings option must be in {:?}",
+                SettingsOptions::VARIANTS
+            )),
         }
     }
 }

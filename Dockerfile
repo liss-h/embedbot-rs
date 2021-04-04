@@ -14,4 +14,4 @@ RUN apt update && apt install libssl-dev ca-certificates -y
 COPY --from=builder /usr/src/embedbot-rs/target/release/embedbot-rs /usr/local/bin/
 RUN chmod +x /usr/local/bin/embedbot-rs
 
-CMD ["/usr/local/bin/embedbot-rs", "--settings-file", "/etc/embedbot.conf"]
+ENTRYPOINT ["/usr/local/bin/embedbot-rs", "--settings-file", "/etc/embedbot.conf"]

@@ -1,20 +1,22 @@
+use std::fmt::Display;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
-use async_trait::async_trait;
+use clap::Clap;
 use serde::{Deserialize, Serialize};
+use serenity::async_trait;
 use serenity::model::channel::Message;
 use serenity::model::gateway::Ready;
 use serenity::model::id::ChannelId;
+use serenity::model::user::User;
 use serenity::prelude::*;
+use strum::AsStaticRef;
+
+use crate::embed_bot::interface::*;
 
 use super::post_grab_api::*;
 
 pub mod interface;
-
-const SETTINGS_CHOICES: [&str; 2] = ["prefix", "do-implicit-auto-embed"];
-const SETTINGS_CHOICES_DESCR: [&str; 2] = [":exclamation: prefix", ":envelope: do-implicit-auto-embed"];
-
 
 pub fn is_url(url: &str) -> bool {
     url.starts_with("http://") || url.starts_with("https://")
@@ -24,6 +26,15 @@ pub fn is_url(url: &str) -> bool {
 pub struct Settings {
     pub prefix: String,
     pub do_implicit_auto_embed: bool,
+}
+
+impl Settings {
+    pub fn display_value(&self, opt: SettingsOptions) -> &dyn Display {
+        match opt {
+            SettingsOptions::Prefix => &self.prefix,
+            SettingsOptions::DoImplicitAutoEmbed => &self.do_implicit_auto_embed,
+        }
+    }
 }
 
 impl TypeMapKey for Settings {
@@ -45,7 +56,6 @@ pub struct EmbedBot {
     apis: Vec<Box<dyn PostScraper + Send + Sync>>,
 }
 
-
 impl EmbedBot {
     pub fn new<P: AsRef<Path>>(settings_path: P) -> Self {
         EmbedBot {
@@ -65,163 +75,131 @@ impl EmbedBot {
         self.apis.push(Box::new(api));
     }
 
-    async fn embed_subroutine(&self, ctx: &Context, msg: &Message, url: &str, comment: Option<&str>) {
+    async fn embed(
+        &self,
+        ctx: &Context,
+        chan: ChannelId,
+        author: &User,
+        url: &str,
+        comment: Option<&str>,
+    ) -> Result<Option<Message>, Box<dyn std::error::Error>> {
         match self.find_api(&url) {
             Some(api) => match api.get_post(url.trim_end_matches('#')).await {
                 Ok(post) if post.should_embed() => {
-                    msg.channel_id.send_message(ctx, |m| {
-                        post.create_embed(&msg.author, comment, m);
-                        m
-                    })
-                    .await
-                    .expect("could not send msg");
-
-                    msg.delete(ctx)
-                        .await
-                        .expect("could not delete msg");
+                    let msg = chan
+                        .send_message(ctx, |m| {
+                            post.create_embed(author, comment.as_deref(), m);
+                            m
+                        })
+                        .await?;
 
                     println!("[Info] embedded '{}': {:?}", url, post);
+                    Ok(Some(msg))
                 }
-                Ok(_) => println!(
-                    "[Info] ignoring '{}'. Reason: not supposed to embed",
-                    msg.content
-                ),
-                Err(e) => eprintln!("[Error] could not fetch post. Reason: {:?}", e),
+                Ok(_) => {
+                    println!("[Info] ignoring '{}'. Reason: not supposed to embed", url);
+                    Ok(None)
+                }
+                Err(e) => {
+                    eprintln!("[Error] could not fetch post. Reason: {:?}", e);
+                    Err(e.into())
+                }
             },
-            None => println!(
-                "[Info] ignoring '{}'. Reason: no api available",
-                msg.content
-            ),
-        }
-    }
-
-    async fn reply_success(chan: ChannelId, ctx: &Context, mes: &str) -> serenity::Result<Message> {
-        chan
-            .send_message(&ctx, |mb| mb.content(format!(":white_check_mark: Success: {}", mes)))
-            .await
-    }
-
-    async fn reply_error(chan: ChannelId, ctx: &Context, mes: &str) -> serenity::Result<Message> {
-        chan
-            .send_message(&ctx, |mb| mb.content(format!(":x: Error: {}", mes)))
-            .await
-    }
-
-    async fn settings_subroutine(&self, settings: &mut Settings, ctx: &Context, msg: &Message, args: &[&str]) {
-
-        if args.is_empty() {
-            msg.channel_id
-                .send_message(&ctx, |m| {
-                    m.embed(|e| {
-
-                        e.title("EmbedBot Settings")
-                            .description(format!("Use the command format `{}settings <option>`", settings.prefix));
-
-                        for (choice, descr) in SETTINGS_CHOICES.iter().zip(SETTINGS_CHOICES_DESCR.iter()) {
-                            e.field(
-                                descr,
-                                format!("`{}settings {}`", settings.prefix, choice), true);
-                        }
-
-                        e
-                    })
-                }).await.unwrap();
-        } else if args.len() == 2 {
-            let ok = if args[0] == SETTINGS_CHOICES[0] {
-                // prefix
-                settings.prefix = args[1].to_string();
-                Self::reply_success(msg.channel_id, ctx, &format!("prefix is now '{}'", settings.prefix))
-                    .await
-                    .unwrap();
-
-                Ok(())
-            } else if args[0] == SETTINGS_CHOICES[1] {
-                // implicit-auto-embed
-
-                match args[1].parse::<bool>() {
-                    Ok(value) => {
-                        settings.do_implicit_auto_embed = value;
-
-                        if value {
-                            Self::reply_success(msg.channel_id, ctx, "bot will now autoembed")
-                                .await
-                                .unwrap();
-                        } else {
-                            Self::reply_success(msg.channel_id, ctx, "bot will no longer autoembed")
-                                .await
-                                .unwrap();
-                        }
-                        Ok(())
-                    },
-                    Err(_) => {
-                        Self::reply_error(msg.channel_id, ctx, "expected boolean")
-                            .await
-                            .unwrap();
-
-                        Err(())
-                    }
-                }
-            } else {
-                Self::reply_error(msg.channel_id, ctx,"invalid setting")
-                    .await
-                    .unwrap();
-
-                Err(())
-            };
-
-            if ok.is_ok() {
-                let f = File::create(&self.settings_path).unwrap();
-                serde_json::to_writer(f, &settings).unwrap();
+            None => {
+                println!("[Info] ignoring '{}'. Reason: no api available", url);
+                Ok(None)
             }
-        } else {
-            Self::reply_error(msg.channel_id, ctx, "required exactly 1 arg")
-                .await
-                .unwrap();
         }
+    }
+
+    async fn reply_success(chan: ChannelId, ctx: &Context, msg: &str) -> serenity::Result<Message> {
+        chan.send_message(ctx, |m| {
+            m.content(format!(":white_check_mark: Success: {}", msg))
+        })
+        .await
+    }
+
+    async fn reply_error(chan: ChannelId, ctx: &Context, msg: &str) -> serenity::Result<Message> {
+        chan.send_message(ctx, |m| m.content(format!(":x: Error: {}", msg)))
+            .await
     }
 }
 
 #[async_trait]
 impl EventHandler for EmbedBot {
-
     async fn message(&self, ctx: Context, msg: Message) {
         if !msg.author.bot {
-
             let mut data = ctx.data.write().await;
             let mut settings = data.get_mut::<Settings>().unwrap();
 
             if msg.content.starts_with(&settings.prefix) {
-                let commandline = &msg.content[settings.prefix.len()..].split(char::is_whitespace)
-                    .collect::<Vec<&str>>();
+                let opts = EmbedBotOpts::try_parse_from(command_line_split(
+                    &msg.content.trim_start_matches(&settings.prefix),
+                ));
 
-                let cmd = commandline[0];
-                let args = &commandline[1..];
-
-                if commandline.is_empty() {
-                    Self::reply_error(msg.channel_id, &ctx, "expected command")
+                match opts {
+                    Ok(EmbedBotOpts::Embed { url, comment }) => {
+                        self.embed(&ctx, msg.channel_id, &msg.author, &url, comment.as_deref())
+                            .await
+                            .unwrap();
+                    }
+                    Ok(EmbedBotOpts::Settings(SettingsSubcommand::Get { key })) => {
+                        Self::reply_success(
+                            msg.channel_id,
+                            &ctx,
+                            &format!(
+                                "The current value for {key} is: {value}",
+                                key = key.as_static(),
+                                value = settings.display_value(key)
+                            ),
+                        )
                         .await
                         .unwrap();
-                } else {
-                    match cmd {
-                        "embed"    => self.embed_subroutine(&ctx, &msg, &args[1], Some(&args[2])).await,
-                        "settings" => self.settings_subroutine(&mut settings, &ctx, &msg, &args).await,
-                        _ => {
-                            msg.channel_id
-                                .send_message(&ctx, |m| m.content(":x: Error unknown command"))
-                                .await
-                                .unwrap();
-                        },
+                    }
+                    Ok(EmbedBotOpts::Settings(SettingsSubcommand::Set { key, value })) => {
+                        let res = match key {
+                            SettingsOptions::Prefix => {
+                                settings.prefix = value;
+                                Ok("Ok")
+                            }
+                            SettingsOptions::DoImplicitAutoEmbed => {
+                                if let Ok(value) = value.parse::<bool>() {
+                                    settings.do_implicit_auto_embed = value;
+                                    Ok("Ok")
+                                } else {
+                                    Err("expected boolean")
+                                }
+                            }
+                        };
+
+                        match res {
+                            Ok(m) => {
+                                Self::reply_success(msg.channel_id, &ctx, m).await.unwrap();
+
+                                if let Ok(f) = File::create(&self.settings_path) {
+                                    serde_json::to_writer(f, &settings).unwrap();
+                                }
+                            }
+                            Err(e) => {
+                                Self::reply_error(msg.channel_id, &ctx, e).await.unwrap();
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        Self::reply_error(msg.channel_id, &ctx, &format!("\n>>>{}", e))
+                            .await
+                            .unwrap();
                     }
                 }
-
             } else if settings.do_implicit_auto_embed {
-                let content: Vec<_> = msg.content.split('\n').collect();
+                let content: Vec<_> = msg.content.lines().collect();
 
-                let (url, comments) = match &content[..] {
+                let (url, comment) = match &content[..] {
                     [] => (None, None),
                     [a] => (is_url(a).then(|| a.to_string()), None),
                     args => {
-                        let (urls, comments): (Vec<_>, Vec<_>) = args.iter()
+                        let (urls, comments): (Vec<_>, Vec<_>) = args
+                            .iter()
                             .filter(|s| !s.is_empty())
                             .map(|s| s.to_string())
                             .partition(|a| is_url(a));
@@ -231,8 +209,11 @@ impl EventHandler for EmbedBot {
                 };
 
                 if let Some(url) = url {
-                    self.embed_subroutine(&ctx, &msg, &url, comments.as_deref())
-                        .await;
+                    self.embed(&ctx, msg.channel_id, &msg.author, &url, comment.as_deref())
+                        .await
+                        .unwrap();
+
+                    msg.delete(&ctx).await.unwrap();
                 }
             }
         }
