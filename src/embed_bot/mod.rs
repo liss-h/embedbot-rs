@@ -159,7 +159,7 @@ impl EventHandler for EmbedBot {
                     Ok(EmbedBotOpts::Settings(SettingsSubcommand::Set { key, value })) => {
                         let res = match key {
                             SettingsOptions::Prefix => {
-                                settings.prefix = value;
+                                settings.prefix = value.clone();
                                 Ok(())
                             }
                             SettingsOptions::DoImplicitAutoEmbed => {
@@ -174,15 +174,13 @@ impl EventHandler for EmbedBot {
 
                         match res {
                             Ok(()) => {
-                                let msg = format!(
+                                let m = format!(
                                     "```c\n{key} := {value}\n```",
                                     key = key.as_static(),
                                     value = value
                                 );
 
-                                Self::reply_success(msg.channel_id, &ctx, &msg)
-                                    .await
-                                    .unwrap();
+                                Self::reply_success(msg.channel_id, &ctx, &m).await.unwrap();
 
                                 if let Ok(f) = File::create(&self.settings_path) {
                                     serde_json::to_writer(f, &settings).unwrap();
