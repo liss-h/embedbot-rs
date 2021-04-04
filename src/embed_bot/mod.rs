@@ -114,13 +114,13 @@ impl EmbedBot {
 
     async fn reply_success(chan: ChannelId, ctx: &Context, msg: &str) -> serenity::Result<Message> {
         chan.send_message(ctx, |m| {
-            m.content(format!(":white_check_mark: Success: {}", msg))
+            m.content(format!(":white_check_mark: Success\n{}", msg))
         })
         .await
     }
 
     async fn reply_error(chan: ChannelId, ctx: &Context, msg: &str) -> serenity::Result<Message> {
-        chan.send_message(ctx, |m| m.content(format!(":x: Error: {}", msg)))
+        chan.send_message(ctx, |m| m.content(format!(":x: Error\n{}", msg)))
             .await
     }
 }
@@ -148,7 +148,7 @@ impl EventHandler for EmbedBot {
                             msg.channel_id,
                             &ctx,
                             &format!(
-                                "The current value for {key} is: {value}",
+                                "```c\n{key} == {value}\n```",
                                 key = key.as_static(),
                                 value = settings.display_value(key)
                             ),
@@ -160,33 +160,43 @@ impl EventHandler for EmbedBot {
                         let res = match key {
                             SettingsOptions::Prefix => {
                                 settings.prefix = value;
-                                Ok("Ok")
+                                Ok(())
                             }
                             SettingsOptions::DoImplicitAutoEmbed => {
                                 if let Ok(value) = value.parse::<bool>() {
                                     settings.do_implicit_auto_embed = value;
-                                    Ok("Ok")
+                                    Ok(())
                                 } else {
-                                    Err("expected boolean")
+                                    Err("expected boolean".to_owned())
                                 }
                             }
                         };
 
                         match res {
-                            Ok(m) => {
-                                Self::reply_success(msg.channel_id, &ctx, m).await.unwrap();
+                            Ok(()) => {
+                                let msg = format!(
+                                    "```c\n{key} := {value}\n```",
+                                    key = key.as_static(),
+                                    value = value
+                                );
+
+                                Self::reply_success(msg.channel_id, &ctx, &msg)
+                                    .await
+                                    .unwrap();
 
                                 if let Ok(f) = File::create(&self.settings_path) {
                                     serde_json::to_writer(f, &settings).unwrap();
                                 }
                             }
                             Err(e) => {
-                                Self::reply_error(msg.channel_id, &ctx, e).await.unwrap();
+                                Self::reply_error(msg.channel_id, &ctx, &format!("```{}```", e))
+                                    .await
+                                    .unwrap();
                             }
                         }
                     }
                     Err(e) => {
-                        Self::reply_error(msg.channel_id, &ctx, &format!("\n>>>{}", e))
+                        Self::reply_error(msg.channel_id, &ctx, &format!("```{}```", e))
                             .await
                             .unwrap();
                     }
