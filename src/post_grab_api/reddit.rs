@@ -248,7 +248,7 @@ impl PostScraper for RedditAPI {
     }
 
     async fn get_post(&self, url: &str) -> Result<Box<dyn Post>, Error> {
-        let url = url.rfind("/?").map(|idx| &url[..idx]).unwrap_or(url);
+        let url = url.rfind("?").map(|idx| &url[..idx]).unwrap_or(url);
 
         let json = wget_json(&format!("{}/.json", url), USER_AGENT).await?;
 
