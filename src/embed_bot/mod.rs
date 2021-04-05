@@ -217,11 +217,14 @@ impl EventHandler for EmbedBot {
                 };
 
                 if let Some(url) = url {
-                    self.embed(&ctx, msg.channel_id, &msg.author, &url, comment.as_deref())
+                    let message = self
+                        .embed(&ctx, msg.channel_id, &msg.author, &url, comment.as_deref())
                         .await
                         .unwrap();
 
-                    msg.delete(&ctx).await.unwrap();
+                    if message.is_some() {
+                        msg.delete(&ctx).await.unwrap();
+                    }
                 }
             }
         }
