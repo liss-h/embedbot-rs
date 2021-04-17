@@ -391,16 +391,13 @@ impl PostScraper for RedditAPI {
                     let url = Url::parse(post_json.get("url")?.as_str()?).or(alt_embed_url);
 
                     match url {
-                        Ok(url) => {
-                            if url_path_ends_with_image_extension(&url) {
-                                RedditPostSpecializedData::Image { img_url: url }
-                            } else if url_path_ends_with(&url, ".gifv") {
-                                RedditPostSpecializedData::Video { video_url: url }
-                            } else {
-                                RedditPostSpecializedData::Text
-                            }
+                        Ok(url) if url_path_ends_with_image_extension(&url) => {
+                            RedditPostSpecializedData::Image { img_url: url }
                         }
-                        Err(_) => RedditPostSpecializedData::Text,
+                        Ok(url) if url_path_ends_with(&url, ".gifv") => {
+                            RedditPostSpecializedData::Video { video_url: url }
+                        }
+                        _ => RedditPostSpecializedData::Text,
                     }
                 }
             },
