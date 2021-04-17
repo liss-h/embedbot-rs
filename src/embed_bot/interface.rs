@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
-use clap::{AppSettings, Clap};
-use strum::{AsStaticStr, EnumVariantNames, VariantNames};
+use clap::{AppSettings, ArgEnum, Clap};
+use strum::AsStaticStr;
 
 enum SplitState {
     Default,
@@ -45,6 +45,7 @@ pub fn command_line_split(cmdl: &str) -> impl Iterator<Item = &str> {
 #[derive(Clap, Debug)]
 #[clap(setting = AppSettings::NoBinaryName)]
 pub enum EmbedBotOpts {
+    #[clap(about = "Change or view the bot settings")]
     Settings(SettingsSubcommand),
     Embed {
         url: String,
@@ -55,12 +56,26 @@ pub enum EmbedBotOpts {
 }
 
 #[derive(Clap, Debug)]
+#[clap(setting = AppSettings::SubcommandRequired)]
 pub enum SettingsSubcommand {
-    Set { key: SettingsOptions, value: String },
-    Get { key: SettingsOptions },
+    #[clap(about = "Sets a bot setting to a new value")]
+    Set {
+        #[clap(about = "the setting to change", possible_values = SettingsOptions::VARIANTS)]
+        key: SettingsOptions,
+
+        #[clap(about = "the desired value")]
+        value: String,
+    },
+
+    #[clap(about = "Displays the current value of a setting")]
+    Get {
+        #[clap(about = "The setting value to display", possible_values = SettingsOptions::VARIANTS)]
+        key: SettingsOptions,
+    },
 }
 
-#[derive(Clap, Debug, EnumVariantNames, AsStaticStr)]
+#[derive(ArgEnum, Debug, AsStaticStr, PartialEq)]
+#[strum(serialize_all = "kebab-case")]
 pub enum SettingsOptions {
     DoImplicitAutoEmbed,
     Prefix,
@@ -70,13 +85,13 @@ impl FromStr for SettingsOptions {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "DoImplicitAutoEmbed" => Ok(SettingsOptions::DoImplicitAutoEmbed),
-            "Prefix" => Ok(SettingsOptions::Prefix),
-            _ => Err(format!(
-                "settings option must be in {:?}",
-                SettingsOptions::VARIANTS
-            )),
-        }
+        <Self as ArgEnum>::from_str(s, true)
     }
+}
+
+#[test]
+fn test() {
+    let o = EmbedBotOpts::parse_from("settings get do-implicit-autoembed --help".split(' '));
+
+    println!("{:?}", o);
 }

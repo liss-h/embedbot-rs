@@ -1,4 +1,4 @@
-#![feature(try_trait, bool_to_option)]
+#![feature(try_trait, bool_to_option, pattern, iter_intersperse, array_map)]
 
 extern crate clap;
 extern crate reqwest;

@@ -3,6 +3,7 @@ use serenity::builder::CreateMessage;
 use serenity::model::user::User;
 use thiserror::Error;
 
+use url::Url;
 pub use util::*;
 
 pub mod imgur;
@@ -22,6 +23,9 @@ pub enum Error {
 
     #[error("HTTP GET failed")]
     HTTPErr(#[from] reqwest::Error),
+
+    #[error("expected url")]
+    UrlParserError(#[from] url::ParseError),
 }
 
 impl From<std::option::NoneError> for Error {
@@ -32,8 +36,8 @@ impl From<std::option::NoneError> for Error {
 
 #[async_trait]
 pub trait PostScraper {
-    fn is_suitable(&self, url: &str) -> bool;
-    async fn get_post(&self, url: &str) -> Result<Box<dyn Post>, Error>;
+    fn is_suitable(&self, url: &Url) -> bool;
+    async fn get_post(&self, url: Url) -> Result<Box<dyn Post>, Error>;
 }
 
 pub trait Post: std::fmt::Debug + Send + Sync {

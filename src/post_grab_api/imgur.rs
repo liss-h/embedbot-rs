@@ -3,7 +3,8 @@ use scraper::selector::Selector;
 use serenity::async_trait;
 
 fn fmt_title(p: &ImgurPost) -> String {
-    let title = limit_len(&escape_markdown(&p.title), EMBED_TITLE_MAX_LEN - 14); // -14 for formatting
+    let em = escape_markdown(&p.title);
+    let title = limit_len(&em, EMBED_TITLE_MAX_LEN - 14); // -14 for formatting
 
     format!("'{}' - **imgur**", title)
 }
@@ -36,12 +37,15 @@ pub struct ImgurAPI;
 // TODO: fix; probably broken
 #[async_trait]
 impl PostScraper for ImgurAPI {
-    fn is_suitable(&self, url: &str) -> bool {
-        url.starts_with("https://") && url.contains("imgur.com")
+    fn is_suitable(&self, url: &Url) -> bool {
+        match url.domain() {
+            Some(d) => d.contains("imgur.com"),
+            None => false,
+        }
     }
 
-    async fn get_post(&self, url: &str) -> Result<Box<dyn Post>, Error> {
-        let html = wget_html(url, USER_AGENT).await?;
+    async fn get_post(&self, url: Url) -> Result<Box<dyn Post>, Error> {
+        let html = wget_html(url.clone(), USER_AGENT).await?;
 
         let title_selector = Selector::parse("title").unwrap();
         let img_selector = Selector::parse(r#"link[rel="image_src"]"#).unwrap();

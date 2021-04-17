@@ -14,3 +14,4 @@ serenity = { version = "^0.10", default-features = false, features = ["rustls_ba
 strum = { version = "^0.20", features = ["derive"] }
 thiserror = "^1.0"
 tokio = { version = "^1.0", features = ["macros", "rt-multi-thread"] }
+url = "2.2.1"

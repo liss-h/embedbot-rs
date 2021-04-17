@@ -12,15 +12,13 @@ use serenity::model::user::User;
 use serenity::prelude::*;
 use strum::AsStaticRef;
 
+use url::Url;
+
 use crate::embed_bot::interface::*;
 
 use super::post_grab_api::*;
 
 pub mod interface;
-
-pub fn is_url(url: &str) -> bool {
-    url.starts_with("http://") || url.starts_with("https://")
-}
 
 #[derive(Serialize, Deserialize)]
 pub struct Settings {
@@ -64,7 +62,7 @@ impl EmbedBot {
         }
     }
 
-    pub fn find_api(&self, url: &str) -> Option<&(dyn PostScraper + Send + Sync)> {
+    pub fn find_api(&self, url: &Url) -> Option<&(dyn PostScraper + Send + Sync)> {
         self.apis
             .iter()
             .find(|a| a.is_suitable(url))
@@ -80,31 +78,39 @@ impl EmbedBot {
         ctx: &Context,
         chan: ChannelId,
         author: &User,
-        url: &str,
+        url: Url,
         comment: Option<&str>,
     ) -> Result<Option<Message>, Box<dyn std::error::Error>> {
         match self.find_api(&url) {
-            Some(api) => match api.get_post(url.trim_end_matches('#')).await {
-                Ok(post) if post.should_embed() => {
-                    let msg = chan
-                        .send_message(ctx, |m| {
-                            post.create_embed(author, comment.as_deref(), m);
-                            m
-                        })
-                        .await?;
+            Some(api) => {
+                let url = {
+                    let mut u = url.clone();
+                    u.set_fragment(None);
+                    u
+                };
 
-                    println!("[Info] embedded '{}': {:?}", url, post);
-                    Ok(Some(msg))
+                match api.get_post(url.clone()).await {
+                    Ok(post) if post.should_embed() => {
+                        let msg = chan
+                            .send_message(ctx, |m| {
+                                post.create_embed(author, comment.as_deref(), m);
+                                m
+                            })
+                            .await?;
+
+                        println!("[Info] embedded '{}': {:?}", url, post);
+                        Ok(Some(msg))
+                    }
+                    Ok(_) => {
+                        println!("[Info] ignoring '{}'. Reason: not supposed to embed", url);
+                        Ok(None)
+                    }
+                    Err(e) => {
+                        eprintln!("[Error] could not fetch post. Reason: {:?}", e);
+                        Ok(None)
+                    }
                 }
-                Ok(_) => {
-                    println!("[Info] ignoring '{}'. Reason: not supposed to embed", url);
-                    Ok(None)
-                }
-                Err(e) => {
-                    eprintln!("[Error] could not fetch post. Reason: {:?}", e);
-                    Err(e.into())
-                }
-            },
+            }
             None => {
                 println!("[Info] ignoring '{}'. Reason: no api available", url);
                 Ok(None)
@@ -138,11 +144,22 @@ impl EventHandler for EmbedBot {
                 ));
 
                 match opts {
-                    Ok(EmbedBotOpts::Embed { url, comment }) => {
-                        self.embed(&ctx, msg.channel_id, &msg.author, &url, comment.as_deref())
+                    Ok(EmbedBotOpts::Embed { url, comment }) => match Url::parse(&url) {
+                        Ok(url) => {
+                            self.embed(&ctx, msg.channel_id, &msg.author, url, comment.as_deref())
+                                .await
+                                .unwrap();
+                        }
+                        Err(_) => {
+                            Self::reply_error(
+                                msg.channel_id,
+                                &ctx,
+                                &format!("could not parse url: {}", url),
+                            )
                             .await
                             .unwrap();
-                    }
+                        }
+                    },
                     Ok(EmbedBotOpts::Settings(SettingsSubcommand::Get { key })) => {
                         Self::reply_success(
                             msg.channel_id,
@@ -204,21 +221,25 @@ impl EventHandler for EmbedBot {
 
                 let (url, comment) = match &content[..] {
                     [] => (None, None),
-                    [a] => (is_url(a).then(|| a.to_string()), None),
+                    [a] => (Url::parse(a).ok(), None),
                     args => {
                         let (urls, comments): (Vec<_>, Vec<_>) = args
                             .iter()
                             .filter(|s| !s.is_empty())
-                            .map(|s| s.to_string())
-                            .partition(|a| is_url(a));
+                            .partition(|a| Url::parse(a).is_ok());
 
-                        (urls.into_iter().next(), Some(comments.join("\n")))
+                        let mut urls = urls.into_iter().map(|u| Url::parse(u).unwrap());
+                        // think about this: .filter(|u| self.find_api(u).is_some());
+
+                        let comments = comments.into_iter().intersperse("\n").collect::<String>();
+
+                        (urls.next(), Some(comments))
                     }
                 };
 
                 if let Some(url) = url {
                     let reply = self
-                        .embed(&ctx, msg.channel_id, &msg.author, &url, comment.as_deref())
+                        .embed(&ctx, msg.channel_id, &msg.author, url, comment.as_deref())
                         .await
                         .unwrap();
 
