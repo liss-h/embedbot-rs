@@ -23,7 +23,7 @@ fn fmt_title(p: &RedditPostCommonData) -> String {
                 title = title,
                 flair = flair,
                 subreddit = to,
-                from = from
+                from = from,
             )
         }
         RedditPostOrigin::JustSubreddit(subreddit) => {
