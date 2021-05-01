@@ -29,18 +29,31 @@ impl Post for NineGagPost {
         self.post_type != NineGagPostType::Image
     }
 
-    fn create_embed(&self, u: &User, _comment: Option<&str>, create_msg: &mut CreateMessage) {
+    fn create_embed(&self, u: &User, comment: Option<&str>, create_msg: &mut CreateMessage) {
         match self.post_type {
             NineGagPostType::Image => {
                 create_msg.embed(|e| e.title(&self.title).url(&self.src).image(&self.embed_url))
             }
-            NineGagPostType::Video => create_msg.content(format!(
-                ">>> **{author}**\nSource: <{src}>\nEmbedURL: {embed_url}\n\n{title}",
-                author = u.name,
-                src = &self.src,
-                embed_url = self.embed_url,
-                title = fmt_title(self),
-            )),
+            NineGagPostType::Video => {
+                let discord_comment = comment
+                    .map(|c| {
+                        format!(
+                            "**Comment By {author}:**\n{comment}\n\n",
+                            author = u.name,
+                            comment = c
+                        )
+                    })
+                    .unwrap_or_default();
+
+                create_msg.content(format!(
+                    ">>> **{author}**\nSource: <{src}>\nEmbedURL: {embed_url}\n\n{discord_comment}{title}",
+                    author = u.name,
+                    src = &self.src,
+                    embed_url = self.embed_url,
+                    discord_comment = discord_comment,
+                    title = fmt_title(self),
+                ))
+            }
         };
     }
 }
