@@ -2,6 +2,8 @@ use serde_json::Value;
 use serenity::async_trait;
 use serenity::builder::CreateEmbed;
 
+use crate::nav_json;
+
 use super::*;
 use std::convert::TryInto;
 
@@ -68,15 +70,6 @@ fn base_embed<'a>(
 fn include_comment<'a>(e: &'a mut CreateEmbed, comment: &RedditComment) -> &'a mut CreateEmbed {
     let name = format!("Comment by Reddit User '{author}'", author = comment.author);
     e.field(name, escape_markdown(&comment.body), true)
-}
-
-fn include_author_comment<'a>(
-    e: &'a mut CreateEmbed,
-    u: &User,
-    comment: &str,
-) -> &'a mut CreateEmbed {
-    let title = format!("Comment by {author}", author = u.name);
-    e.field(title, comment, false)
 }
 
 fn unescape_url(url: &str) -> String {
@@ -258,59 +251,49 @@ impl PostScraper for RedditAPI {
             (u, wget_json(get_url, USER_AGENT).await?)
         };
 
-        let top_level_post = json
-            .get(0)?
-            .get("data")?
-            .get("children")?
-            .get(0)?
-            .get("data")?
-            .as_object()?;
+        let top_level_post = nav_json! {
+            json => 0 => "data" => "children" => 0 => "data";
+            as object
+        }?;
 
-        let title = top_level_post.get("title")?.as_str()?.to_string();
+        let title = nav_json! { top_level_post => "title"; as str }?
+            .to_string();
 
-        let subreddit = top_level_post.get("subreddit")?.as_str()?.to_string();
+        let subreddit = nav_json! { top_level_post => "subreddit"; as str }?
+            .to_string();
 
         // post_json is either top_level_post or the original post (in case of crosspost)
-        let (is_xpost, post_json) = top_level_post
-            .get("crosspost_parent_list")
-            .and_then(|arr| arr.get(0))
-            .and_then(Value::as_object)
-            .map(|parent| (true, parent))
-            .unwrap_or((false, top_level_post));
+        let (is_xpost, post_json) =
+            nav_json! { top_level_post => "crosspost_parent_list" => 0; as object }
+                .map(|parent| (true, parent))
+                .unwrap_or((false, top_level_post));
 
-        let original_subreddit = post_json.get("subreddit")?.as_str()?.to_string();
+        let original_subreddit = nav_json! { post_json => "subreddit"; as str }?.to_string();
 
-        let text = unescape_html(post_json.get("selftext")?.as_str()?);
+        let text = unescape_html(nav_json! { post_json => "selftext"; as str }?);
 
-        let flair = post_json
-            .get("link_flair_text")
-            .and_then(Value::as_str)
+        let flair = nav_json! { post_json => "link_flair_text"; as str }
             .map(ToString::to_string)
             .unwrap_or_default();
 
-        let nsfw = post_json
-            .get("over_18")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
+        let nsfw = nav_json! { post_json => "over_18"; as bool }
+            .unwrap_or_default();
 
-        let spoiler = post_json
-            .get("spoiler")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
+        let spoiler = nav_json! { post_json => "spoiler"; as bool }
+            .unwrap_or_default();
 
         let comment = {
-            let comment_json = json
-                .get(1)
-                .and_then(|j| j.get("data"))
-                .and_then(|j| j.get("children"))
-                .and_then(|j| j.get(0))
-                .and_then(|j| j.get("data"));
-
+            let comment_json = nav_json! {
+                json => 1 => "data" => "children" => 0 => "data"
+            };
+            
             match comment_json {
-                Some(comment) if url_path_ends_with(&url, comment.get("id")?.as_str()?) => {
+                Ok(comment)
+                    if url_path_ends_with(&url, nav_json! { comment => "id"; as str }?) =>
+                {
                     Some(RedditComment {
-                        author: comment.get("author")?.as_str()?.to_owned(),
-                        body: unescape_html(comment.get("body")?.as_str()?),
+                        author: nav_json! { comment => "author"; as str }?.to_owned(),
+                        body: unescape_html(nav_json! { comment => "body"; as str }?),
                     })
                 }
                 _ => None,
@@ -344,29 +327,20 @@ impl PostScraper for RedditAPI {
         };
 
         // embed_url can be "default" when the original post (referenced by crosspost) is deleted
-        let alt_embed_url: Result<Url, _> = top_level_post
-            .get("thumbnail")
-            .and_then(Value::as_str)
-            .ok_or(Error::JSONNavErr)
+        let alt_embed_url = nav_json! { top_level_post => "thumbnail"; as str }
             .and_then(|s| Url::parse(s).map_err(Into::into));
 
         let specialized_data = match post_json.get("secure_media") {
             Some(Value::Object(sm)) if sm.contains_key("reddit_video") => {
                 RedditPostSpecializedData::Video {
-                    video_url: sm
-                        .get("reddit_video")?
-                        .get("fallback_url")?
-                        .as_str()?
+                    video_url: nav_json! { sm => "reddit_video" => "fallback_url"; as str }?
                         .try_into()?,
                 }
             }
 
             Some(Value::Object(sm)) if sm.contains_key("oembed") => {
                 RedditPostSpecializedData::Image {
-                    img_url: sm
-                        .get("oembed")?
-                        .get("thumbnail_url")?
-                        .as_str()?
+                    img_url: nav_json! { sm => "oembed" => "thumbnail_url"; as str }?
                         .try_into()
                         .unwrap_or(alt_embed_url?),
                 }
@@ -377,18 +351,16 @@ impl PostScraper for RedditAPI {
                     img_urls: meta
                         .iter()
                         .map(|(_key, imgmeta)| {
-                            imgmeta
-                                .get("s")
-                                .and_then(Value::as_object)
-                                .and_then(|inner| inner.get("u"))
-                                .and_then(Value::as_str)
+                            (nav_json! { imgmeta => "s" => "u"; as str })
                                 .map(unescape_url)
-                                .and_then(|u| Url::parse(&u).ok())
+                                .and_then(|u| Url::parse(&u).map_err(Into::into))
                         })
-                        .collect::<Option<Vec<_>>>()?,
+                        .collect::<Result<Vec<_>, _>>()
+                        .map_err(|_| Error::JsonConvError("invalid url in gallery"))?,
                 },
                 _ => {
-                    let url = Url::parse(post_json.get("url")?.as_str()?).or(alt_embed_url);
+                    let url =
+                        Url::parse(nav_json! { post_json => "url"; as str }?).or(alt_embed_url);
 
                     match url {
                         Ok(url) if url_path_ends_with_image_extension(&url) => {

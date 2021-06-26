@@ -51,7 +51,13 @@ impl PostScraper for ImgurAPI {
         let img_selector = Selector::parse(r#"link[rel="image_src"]"#).unwrap();
 
         let title = {
-            let tmp: String = html.select(&title_selector).next()?.text().collect();
+            let tmp: String = html
+                .select(&title_selector)
+                .next()
+                .ok_or(Error::JSONNavErr("could not find title"))?
+                .text()
+                .collect();
+
             let beg = tmp.find(|ch: char| !ch.is_whitespace()).unwrap_or(0);
 
             tmp[beg..(tmp.len() - 8)].to_string()
@@ -59,9 +65,11 @@ impl PostScraper for ImgurAPI {
 
         let embed_url = html
             .select(&img_selector)
-            .next()?
+            .next()
+            .ok_or(Error::JSONNavErr("could not find imgur url"))?
             .value()
-            .attr("href")?
+            .attr("href")
+            .ok_or(Error::JSONNavErr("missing href"))?
             .to_string();
 
         Ok(Box::new(ImgurPost {

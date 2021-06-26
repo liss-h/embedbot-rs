@@ -1,5 +1,7 @@
 use super::Error;
 use reqwest::IntoUrl;
+use serenity::builder::CreateEmbed;
+use serenity::model::prelude::User;
 use std::borrow::Cow;
 use std::str::pattern::{Pattern, ReverseSearcher};
 use url::Url;
@@ -92,4 +94,13 @@ pub fn limit_len(text: &str, limit: usize) -> Cow<str> {
 
 pub fn limit_descr_len(text: &str) -> Cow<'_, str> {
     limit_len(text, EMBED_CONTENT_MAX_LEN)
+}
+
+pub fn include_author_comment<'a>(
+    e: &'a mut CreateEmbed,
+    u: &User,
+    comment: &str,
+) -> &'a mut CreateEmbed {
+    let title = format!("Comment by {author}", author = u.name);
+    e.field(title, comment, false)
 }

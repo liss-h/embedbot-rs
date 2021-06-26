@@ -1,14 +1,6 @@
-#![feature(try_trait, bool_to_option, pattern, iter_intersperse, array_map)]
-
-extern crate clap;
-extern crate reqwest;
-extern crate scraper;
-extern crate serde;
-extern crate serde_json;
-extern crate serenity;
-extern crate strum;
-extern crate thiserror;
-extern crate tokio;
+#![feature(pattern)]
+#![feature(iter_intersperse)]
+#![feature(array_map)]
 
 use std::fs::File;
 

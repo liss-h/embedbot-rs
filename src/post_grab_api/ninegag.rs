@@ -1,6 +1,8 @@
 use serenity::async_trait;
 use serenity::model::user::User;
 
+use crate::nav_json;
+
 use super::*;
 
 fn fmt_title(p: &NineGagPost) -> String {
@@ -72,7 +74,11 @@ impl PostScraper for NineGagAPI {
 
         let title: String = {
             let title_selector = scraper::Selector::parse("title").unwrap();
-            html.select(&title_selector).next()?.text().collect()
+            html.select(&title_selector)
+                .next()
+                .ok_or(Error::JSONNavErr("could not find title"))?
+                .text()
+                .collect()
         };
 
         let build_json: serde_json::Value = {
@@ -80,7 +86,8 @@ impl PostScraper for NineGagAPI {
 
             let script_text: String = html
                 .select(&script_selector)
-                .find(|elem| elem.text().collect::<String>().contains("JSON.parse"))?
+                .find(|elem| elem.text().collect::<String>().contains("JSON.parse"))
+                .ok_or(Error::JSONNavErr("could not find json"))?
                 .text()
                 .collect::<String>()
                 .replace("\\", "");
@@ -88,35 +95,31 @@ impl PostScraper for NineGagAPI {
             serde_json::from_str(&script_text[29..(script_text.len() - 3)])?
         };
 
-        let post_json = build_json.get("data")?.get("post")?.as_object()?;
+        let post_json = nav_json! { build_json => "data" => "post"; as object }?;
 
-        let (post_type, embed_url) = match post_json.get("type")?.as_str()? {
+        let (post_type, embed_url) = match nav_json! { post_json => "type"; as str }? {
             "Photo" => (
                 NineGagPostType::Image,
-                post_json
-                    .get("images")?
-                    .get("image700")?
-                    .get("url")?
-                    .as_str()?
+                nav_json! { post_json => "images" => "image700" => "url"; as str }?
                     .to_string(),
             ),
 
             "Animated" => {
-                let imgs = post_json.get("images")?.as_object()?;
+                let imgs = nav_json! { post_json => "images"; as object }?;
+
+                let img_alts = nav_json! { imgs => "image460svwm" }
+                    .or_else(|_| nav_json! { imgs => "image460sv" })?;
 
                 (
                     NineGagPostType::Video,
-                    imgs.get("image460svwm")
-                        .or_else(|| imgs.get("image460sv"))?
-                        .get("url")?
-                        .as_str()?
-                        .to_string(),
+                    nav_json! { img_alts => "url"; as str }?
+                        .to_string()
                 )
             }
 
             _ => (
                 NineGagPostType::Video,
-                post_json.get("vp9Url")?.as_str()?.to_string(),
+                nav_json! { post_json => "vp9Url"; as str }?.to_string(),
             ),
         };
 
