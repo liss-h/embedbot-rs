@@ -100,8 +100,7 @@ impl PostScraper for NineGagAPI {
         let (post_type, embed_url) = match nav_json! { post_json => "type"; as str }? {
             "Photo" => (
                 NineGagPostType::Image,
-                nav_json! { post_json => "images" => "image700" => "url"; as str }?
-                    .to_string(),
+                nav_json! { post_json => "images" => "image700" => "url"; as str }?.to_string(),
             ),
 
             "Animated" => {
@@ -112,8 +111,7 @@ impl PostScraper for NineGagAPI {
 
                 (
                     NineGagPostType::Video,
-                    nav_json! { img_alts => "url"; as str }?
-                        .to_string()
+                    nav_json! { img_alts => "url"; as str }?.to_string(),
                 )
             }
 
