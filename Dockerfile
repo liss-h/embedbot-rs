@@ -1,4 +1,4 @@
-FROM rustlang/rust:nightly-stretch-slim AS builder
+FROM rustlang/rust:nightly-bullseye-slim AS builder
 RUN apt-get update && apt-get install pkg-config libssl-dev -y
 WORKDIR /usr/src/embedbot-rs
 COPY ./Cargo.toml ./
@@ -6,7 +6,7 @@ COPY ./src ./src
 RUN cargo build --release
 
 
-FROM debian:stretch-slim
+FROM debian:bullseye-slim
 
 ENV DISCORD_TOKEN=YOUR_DISCORD_TOKEN_HERE
 

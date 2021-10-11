@@ -138,7 +138,8 @@ impl EventHandler for EmbedBot {
             if msg.content.starts_with(&settings.prefix) {
                 let opts = EmbedBotOpts::try_parse_from(command_line_split(
                     msg.content.trim_start_matches(&settings.prefix),
-                ));
+                ))
+                .map_err(|e| format!("```{}```", e));
 
                 match opts {
                     Ok(EmbedBotOpts::Embed { url, comment }) => match Url::parse(&url) {
@@ -201,14 +202,14 @@ impl EventHandler for EmbedBot {
                                 }
                             }
                             Err(e) => {
-                                Self::reply_error(msg.channel_id, &ctx, &format!("```{}```", e))
+                                Self::reply_error(msg.channel_id, &ctx, &e)
                                     .await
                                     .unwrap();
                             }
                         }
                     }
                     Err(e) => {
-                        Self::reply_error(msg.channel_id, &ctx, &format!("```{}```", e))
+                        Self::reply_error(msg.channel_id, &ctx, &e)
                             .await
                             .unwrap();
                     }

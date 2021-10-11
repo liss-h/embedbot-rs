@@ -1,4 +1,4 @@
-#![feature(pattern)]
+#![feature(pattern, iter_intersperse)]
 
 use std::fs::File;
 
