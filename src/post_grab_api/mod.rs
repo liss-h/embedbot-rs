@@ -1,8 +1,10 @@
 use serenity::async_trait;
-use serenity::builder::CreateMessage;
 use serenity::model::user::User;
 use thiserror::Error;
 
+use serenity::model::channel::Message;
+use serenity::model::id::ChannelId;
+use serenity::prelude::Context;
 use url::Url;
 pub use util::*;
 
@@ -17,19 +19,22 @@ pub const USER_AGENT: &str = "embedbot v0.2";
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("invalid json")]
-    JSONParseErr(#[from] serde_json::Error),
+    JsonParse(#[from] serde_json::Error),
 
     #[error("could not navigate to {0} in json")]
-    JSONNavErr(&'static str),
+    JsonNav(&'static str),
 
     #[error("expected {0}")]
-    JsonConvError(&'static str),
+    JsonConv(&'static str),
 
     #[error("HTTP GET failed")]
-    HTTPErr(#[from] reqwest::Error),
+    HttpCommunication(#[from] reqwest::Error),
 
     #[error("expected url")]
-    UrlParserError(#[from] url::ParseError),
+    UrlParse(#[from] url::ParseError),
+
+    #[error("invalid svg")]
+    SvgParse(#[from] usvg::Error),
 }
 
 #[async_trait]
@@ -38,9 +43,16 @@ pub trait PostScraper {
     async fn get_post(&self, url: Url) -> Result<Box<dyn Post>, Error>;
 }
 
+#[async_trait]
 pub trait Post: std::fmt::Debug + Send + Sync {
     fn should_embed(&self) -> bool;
-    fn create_embed(&self, u: &User, comment: Option<&str>, create_message: &mut CreateMessage);
+    async fn send_embed(
+        &self,
+        u: &User,
+        comment: Option<&str>,
+        chan: &ChannelId,
+        ctx: &Context,
+    ) -> Result<Message, Box<dyn std::error::Error>>;
 }
 
 #[macro_export]
@@ -48,7 +60,7 @@ macro_rules! nav_json {
     ($json:expr, $base_path:expr, $path:expr) => {
     	$json.and_then(|x| {
 	    	x.get($path)
-	    		.ok_or(Error::JSONNavErr(concat!($base_path, '.', $path)))
+	    		.ok_or(Error::JsonNav(concat!($base_path, '.', $path)))
 	    })
     };
 
@@ -68,7 +80,7 @@ macro_rules! nav_json {
     		let _x = {
     			nav_json!{ $json => $($path)=>+ }
     		};
-    		_x.and_then(|x| x.as_object().ok_or(Error::JsonConvError("Expected object")))
+    		_x.and_then(|x| x.as_object().ok_or(Error::JsonConv("Expected object")))
     	}
     };
 
@@ -77,7 +89,7 @@ macro_rules! nav_json {
     		let _x = {
     			nav_json!{ $json => $($path)=>+ }
     		};
-    		_x.and_then(|x| x.as_array().ok_or(Error::JsonConvError("Expected array")))
+    		_x.and_then(|x| x.as_array().ok_or(Error::JsonConv("Expected array")))
     	}
     };
 
@@ -86,7 +98,7 @@ macro_rules! nav_json {
     		let _x = {
     			nav_json!{ $json => $($path)=>+ }
     		};
-    		_x.and_then(|x| x.as_str().ok_or(Error::JsonConvError("Expected str")))
+    		_x.and_then(|x| x.as_str().ok_or(Error::JsonConv("Expected str")))
     	}
     };
 
@@ -95,7 +107,7 @@ macro_rules! nav_json {
     		let _x = {
     			nav_json!{ $json => $($path)=>+ }
     		};
-    		_x.and_then(|x| x.as_bool().ok_or(Error::JsonConvError("Expected bool")))
+    		_x.and_then(|x| x.as_bool().ok_or(Error::JsonConv("Expected bool")))
     	}
     };
 }

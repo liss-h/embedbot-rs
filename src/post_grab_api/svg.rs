@@ -2,31 +2,44 @@ use serenity::async_trait;
 use tempfile::NamedTempFile;
 
 use super::*;
+use tiny_skia::Pixmap;
 
 #[derive(Copy, Clone, Default)]
 pub struct SvgApi;
 
 #[derive(Debug)]
-pub struct SvgPost(NamedTempFile);
+pub struct SvgPost {
+    src: Url,
+    converted: NamedTempFile,
+}
 
 impl SvgApi {
     async fn scrape_post(&self, url: Url) -> Result<SvgPost, Error> {
-        let res = wget(url, USER_AGENT).await?;
+        let res = wget(url.clone(), USER_AGENT).await?;
         let svg_str = res.text().await?;
-        let svg = nsvg::parse_str(&svg_str, nsvg::Units::Pixel, 96.0).unwrap();
-        let img = svg.rasterize(1.0).unwrap();
 
-        let path = NamedTempFile::new().unwrap();
-        img.save(&path).unwrap();
+        let svg = usvg::Tree::from_str(&svg_str, &usvg::Options::default().to_ref())?;
 
-        Ok(SvgPost(path))
+        let size = svg.svg_node().size;
+
+        let mut pix = Pixmap::new(size.width() as u32, size.height() as u32).unwrap();
+        resvg::render(&svg, usvg::FitTo::Original, pix.as_mut()).unwrap();
+
+        let path = tempfile::Builder::new().suffix(".png").tempfile().unwrap();
+
+        pix.save_png(&path).unwrap();
+
+        Ok(SvgPost {
+            src: url,
+            converted: path,
+        })
     }
 }
 
 #[async_trait]
 impl PostScraper for SvgApi {
     fn is_suitable(&self, url: &Url) -> bool {
-        url.path().trim_end_matches("/").ends_with(".svg")
+        url.path().trim_end_matches('/').ends_with(".svg")
     }
 
     async fn get_post(&self, url: Url) -> Result<Box<dyn Post>, Error> {
@@ -34,35 +47,55 @@ impl PostScraper for SvgApi {
     }
 }
 
+#[async_trait]
 impl Post for SvgPost {
     fn should_embed(&self) -> bool {
         true
     }
 
-    fn create_embed(&self, u: &User, comment: Option<&str>, create_message: &mut CreateMessage) {
-        create_message.embed(|e| {
-            e.author(|a| a.name(&u.name))
-                .attachment(self.0.path().display());
+    async fn send_embed(
+        &self,
+        u: &User,
+        comment: Option<&str>,
+        chan: &ChannelId,
+        ctx: &Context,
+    ) -> Result<Message, Box<dyn std::error::Error>> {
+        let msg = chan
+            .send_files(ctx, [self.converted.path()], |m| {
+                let discord_comment = comment
+                    .map(|c| {
+                        format!(
+                            "**Comment By {author}:**\n{comment}\n\n",
+                            author = u.name,
+                            comment = c
+                        )
+                    })
+                    .unwrap_or_default();
 
-            if let Some(comment) = comment {
-                include_author_comment(e, u, comment);
-            }
+                m.content(format!(
+                    ">>> **{author}**\nSource: <{src}>\n\n{discord_comment}",
+                    author = u.name,
+                    src = &self.src,
+                    discord_comment = discord_comment,
+                ))
+            })
+            .await?;
 
-            e
-        });
+        Ok(msg)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
     use super::*;
+    use std::str::FromStr;
 
     #[tokio::test]
     async fn svg_grab() {
-        let url = "https://raw.githubusercontent.com/memononen/nanosvg/master/example/nano.svg";// "https://upload.wikimedia.org/wikipedia/commons/0/09/Fedora_logo_and_wordmark.svg";
+        let url = "https://raw.githubusercontent.com/memononen/nanosvg/master/example/nano.svg"; // "https://upload.wikimedia.org/wikipedia/commons/0/09/Fedora_logo_and_wordmark.svg";
         let api = SvgApi::default();
         let post = api.scrape_post(Url::from_str(url).unwrap()).await.unwrap();
-    }
 
+        println!("{:?}", post.0.keep().unwrap().1);
+    }
 }

@@ -10,10 +10,12 @@ reqwest = { version = "^0.11", default-features = false, features = ["rustls-tls
 scraper = "^0.10"
 serde = { version = "^1.0", features = ["derive"] }
 serde_json = "^1.0"
-serenity = { version = "0.10.8", default-features = false, features = ["rustls_backend", "model", "client", "gateway", "unstable_discord_api"] }
+serenity = { version = "0.10.8", default-features = false, features = ["rustls_backend", "model", "client", "gateway"] }
 strum = { version = "^0.20", features = ["derive"] }
 thiserror = "^1.0"
 tokio = { version = "^1.0", features = ["macros", "rt-multi-thread"] }
 url = "2.2.1"
-nsvg = "0.5.1"
+resvg = "0.19.0"
+usvg = "0.19.0"
+tiny-skia = "0.6.1"
 tempfile = "3.2.0"

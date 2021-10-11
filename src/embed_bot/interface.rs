@@ -88,10 +88,3 @@ impl FromStr for SettingsOptions {
         <Self as ArgEnum>::from_str(s, true)
     }
 }
-
-#[test]
-fn test() {
-    let o = EmbedBotOpts::parse_from("settings get do-implicit-autoembed --help".split(' '));
-
-    println!("{:?}", o);
-}

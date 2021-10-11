@@ -91,11 +91,8 @@ impl EmbedBot {
 
                 match api.get_post(url.clone()).await {
                     Ok(post) if post.should_embed() => {
-                        let msg = chan
-                            .send_message(ctx, |m| {
-                                post.create_embed(author, comment.as_deref(), m);
-                                m
-                            })
+                        let msg = post
+                            .send_embed(author, comment, &chan, ctx)
                             .await?;
 
                         println!("[Info] embedded '{}': {:?}", url, post);
@@ -140,7 +137,7 @@ impl EventHandler for EmbedBot {
 
             if msg.content.starts_with(&settings.prefix) {
                 let opts = EmbedBotOpts::try_parse_from(command_line_split(
-                    &msg.content.trim_start_matches(&settings.prefix),
+                    msg.content.trim_start_matches(&settings.prefix),
                 ));
 
                 match opts {

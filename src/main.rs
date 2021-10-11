@@ -1,6 +1,4 @@
 #![feature(pattern)]
-#![feature(iter_intersperse)]
-#![feature(array_map)]
 
 use std::fs::File;
 
@@ -35,6 +33,7 @@ async fn main() {
         e.register_api(reddit::RedditAPI::default());
         e.register_api(ninegag::NineGagAPI::default());
         e.register_api(imgur::ImgurAPI::default());
+        e.register_api(svg::SvgApi::default());
 
         e
     };

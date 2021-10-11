@@ -26,37 +26,49 @@ pub struct NineGagPost {
     post_type: NineGagPostType,
 }
 
+#[async_trait]
 impl Post for NineGagPost {
     fn should_embed(&self) -> bool {
         self.post_type != NineGagPostType::Image
     }
 
-    fn create_embed(&self, u: &User, comment: Option<&str>, create_msg: &mut CreateMessage) {
-        match self.post_type {
-            NineGagPostType::Image => {
-                create_msg.embed(|e| e.title(&self.title).url(&self.src).image(&self.embed_url))
-            }
-            NineGagPostType::Video => {
-                let discord_comment = comment
-                    .map(|c| {
-                        format!(
-                            "**Comment By {author}:**\n{comment}\n\n",
-                            author = u.name,
-                            comment = c
-                        )
-                    })
-                    .unwrap_or_default();
+    async fn send_embed(
+        &self,
+        u: &User,
+        comment: Option<&str>,
+        chan: &ChannelId,
+        ctx: &Context,
+    ) -> Result<Message, Box<dyn std::error::Error>> {
+        let msg = chan.send_message(ctx, |m| {
+            match self.post_type {
+                NineGagPostType::Image => {
+                    m.embed(|e| e.title(&self.title).url(&self.src).image(&self.embed_url))
+                }
+                NineGagPostType::Video => {
+                    let discord_comment = comment
+                        .map(|c| {
+                            format!(
+                                "**Comment By {author}:**\n{comment}\n\n",
+                                author = u.name,
+                                comment = c
+                            )
+                        })
+                        .unwrap_or_default();
 
-                create_msg.content(format!(
-                    ">>> **{author}**\nSource: <{src}>\nEmbedURL: {embed_url}\n\n{discord_comment}{title}",
-                    author = u.name,
-                    src = &self.src,
-                    embed_url = self.embed_url,
-                    discord_comment = discord_comment,
-                    title = fmt_title(self),
-                ))
+                    m.content(format!(
+                        ">>> **{author}**\nSource: <{src}>\nEmbedURL: {embed_url}\n\n{discord_comment}{title}",
+                        author = u.name,
+                        src = &self.src,
+                        embed_url = self.embed_url,
+                        discord_comment = discord_comment,
+                        title = fmt_title(self),
+                    ))
+                }
             }
-        };
+        })
+        .await?;
+
+        Ok(msg)
     }
 }
 
@@ -76,7 +88,7 @@ impl PostScraper for NineGagAPI {
             let title_selector = scraper::Selector::parse("title").unwrap();
             html.select(&title_selector)
                 .next()
-                .ok_or(Error::JSONNavErr("could not find title"))?
+                .ok_or(Error::JsonNav("could not find title"))?
                 .text()
                 .collect()
         };
@@ -87,7 +99,7 @@ impl PostScraper for NineGagAPI {
             let script_text: String = html
                 .select(&script_selector)
                 .find(|elem| elem.text().collect::<String>().contains("JSON.parse"))
-                .ok_or(Error::JSONNavErr("could not find json"))?
+                .ok_or(Error::JsonNav("could not find json"))?
                 .text()
                 .collect::<String>()
                 .replace("\\", "");

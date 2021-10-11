@@ -173,59 +173,69 @@ fn manual_embed(
     )
 }
 
+#[async_trait]
 impl Post for RedditPost {
     fn should_embed(&self) -> bool {
         true
     }
 
-    fn create_embed(&self, u: &User, comment: Option<&str>, create_msg: &mut CreateMessage) {
-        match self.common.show_mode {
-            RedditPostShowMode::Nsfw => create_msg.embed(|e| {
-                e.title(fmt_title(&self.common))
-                    .description("Warning NSFW: Click to view content")
-                    .author(|a| a.name(&u.name))
-                    .url(&self.common.src);
+    async fn send_embed(
+        &self,
+        u: &User,
+        comment: Option<&str>,
+        chan: &ChannelId,
+        ctx: &Context,
+    ) -> Result<Message, Box<dyn std::error::Error>> {
+        let msg = chan
+            .send_message(ctx, |m| match self.common.show_mode {
+                RedditPostShowMode::Nsfw => m.embed(|e| {
+                    e.title(fmt_title(&self.common))
+                        .description("Warning NSFW: Click to view content")
+                        .author(|a| a.name(&u.name))
+                        .url(&self.common.src);
 
-                if let Some(comment) = comment {
-                    include_author_comment(e, u, comment);
-                }
-
-                e
-            }),
-            RedditPostShowMode::Spoiler => create_msg.embed(|e| {
-                e.title(fmt_title(&self.common))
-                    .description("Spoiler: Click to view content")
-                    .author(|a| a.name(&u.name))
-                    .url(&self.common.src);
-
-                if let Some(comment) = comment {
-                    include_author_comment(e, u, comment);
-                }
-
-                if let Some(comment) = &self.common.comment {
-                    include_comment(e, comment);
-                }
-
-                e
-            }),
-
-            RedditPostShowMode::Default => {
-                match &self.specialized {
-                    RedditPostSpecializedData::Text => {
-                        create_msg.embed(|e| base_embed(e, u, comment, self))
+                    if let Some(comment) = comment {
+                        include_author_comment(e, u, comment);
                     }
+
+                    e
+                }),
+                RedditPostShowMode::Spoiler => m.embed(|e| {
+                    e.title(fmt_title(&self.common))
+                        .description("Spoiler: Click to view content")
+                        .author(|a| a.name(&u.name))
+                        .url(&self.common.src);
+
+                    if let Some(comment) = comment {
+                        include_author_comment(e, u, comment);
+                    }
+
+                    if let Some(comment) = &self.common.comment {
+                        include_comment(e, comment);
+                    }
+
+                    e
+                }),
+
+                RedditPostShowMode::Default => match &self.specialized {
+                    RedditPostSpecializedData::Text => m.embed(|e| base_embed(e, u, comment, self)),
                     RedditPostSpecializedData::Image { img_url } => {
-                        create_msg.embed(|e| base_embed(e, u, comment, self).image(&img_url))
+                        m.embed(|e| base_embed(e, u, comment, self).image(&img_url))
                     }
                     RedditPostSpecializedData::Gallery { img_urls } => {
-                        create_msg.content(manual_embed(&u.name, &self.common, &img_urls, comment))
+                        m.content(manual_embed(&u.name, &self.common, img_urls, comment))
                     }
-                    RedditPostSpecializedData::Video { video_url } => create_msg.content(
-                        manual_embed(&u.name, &self.common, &[video_url.clone()], comment),
-                    ),
-                }
-            }
-        };
+                    RedditPostSpecializedData::Video { video_url } => m.content(manual_embed(
+                        &u.name,
+                        &self.common,
+                        &[video_url.clone()],
+                        comment,
+                    )),
+                },
+            })
+            .await?;
+
+        Ok(msg)
     }
 }
 
@@ -333,7 +343,7 @@ impl RedditAPI {
                                 .and_then(|u| Url::parse(&u).map_err(Into::into))
                         })
                         .collect::<Result<Vec<_>, _>>()
-                        .map_err(|_| Error::JsonConvError("invalid url in gallery"))?;
+                        .map_err(|_| Error::JsonConv("invalid url in gallery"))?;
 
                     if urls.len() == 1 {
                         RedditPostSpecializedData::Image {

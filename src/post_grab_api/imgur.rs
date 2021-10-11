@@ -16,18 +16,31 @@ pub struct ImgurPost {
     embed_url: String,
 }
 
+#[async_trait]
 impl Post for ImgurPost {
     fn should_embed(&self) -> bool {
         true
     }
 
-    fn create_embed<'a>(&self, u: &User, _comment: Option<&str>, create_msg: &mut CreateMessage) {
-        create_msg.embed(|e| {
-            e.title(&fmt_title(self))
-                .author(|a| a.name(&u.name))
-                .url(&self.src)
-                .image(&self.embed_url)
-        });
+    async fn send_embed(
+        &self,
+        u: &User,
+        _comment: Option<&str>,
+        chan: &ChannelId,
+        ctx: &Context,
+    ) -> Result<Message, Box<dyn std::error::Error>> {
+        let msg = chan
+            .send_message(ctx, |m| {
+                m.embed(|e| {
+                    e.title(&fmt_title(self))
+                        .author(|a| a.name(&u.name))
+                        .url(&self.src)
+                        .image(&self.embed_url)
+                })
+            })
+            .await?;
+
+        Ok(msg)
     }
 }
 
@@ -54,7 +67,7 @@ impl PostScraper for ImgurAPI {
             let tmp: String = html
                 .select(&title_selector)
                 .next()
-                .ok_or(Error::JSONNavErr("could not find title"))?
+                .ok_or(Error::JsonNav("could not find title"))?
                 .text()
                 .collect();
 
@@ -66,10 +79,10 @@ impl PostScraper for ImgurAPI {
         let embed_url = html
             .select(&img_selector)
             .next()
-            .ok_or(Error::JSONNavErr("could not find imgur url"))?
+            .ok_or(Error::JsonNav("could not find imgur url"))?
             .value()
             .attr("href")
-            .ok_or(Error::JSONNavErr("missing href"))?
+            .ok_or(Error::JsonNav("missing href"))?
             .to_string();
 
         Ok(Box::new(ImgurPost {
