@@ -1,29 +1,33 @@
-use serenity::async_trait;
-use serenity::model::user::User;
-use thiserror::Error;
-
-use serenity::model::channel::Message;
-use serenity::model::id::ChannelId;
-use serenity::prelude::Context;
-use url::Url;
-pub use util::*;
-
 pub mod imgur;
 pub mod ninegag;
 pub mod reddit;
 pub mod svg;
 pub mod util;
 
+pub use util::*;
+
+use crate::embed_bot::Settings;
+use serenity::{
+    async_trait,
+    client::Context,
+    model::{channel::Message, id::ChannelId, user::User},
+};
+use thiserror::Error;
+use url::Url;
+
 pub const USER_AGENT: &str = "embedbot v0.2";
 
 #[derive(Debug, Error)]
 pub enum Error {
+    #[cfg(any(feature = "ninegag", feature = "reddit"))]
     #[error("invalid json")]
     JsonParse(#[from] serde_json::Error),
 
+    #[cfg(any(feature = "ninegag", feature = "reddit"))]
     #[error("could not navigate to {0} in json")]
     JsonNav(&'static str),
 
+    #[cfg(any(feature = "ninegag", feature = "reddit"))]
     #[error("expected {0}")]
     JsonConv(&'static str),
 
@@ -33,6 +37,7 @@ pub enum Error {
     #[error("expected url")]
     UrlParse(#[from] url::ParseError),
 
+    #[cfg(feature = "svg")]
     #[error("invalid svg")]
     SvgParse(#[from] usvg::Error),
 }
@@ -45,7 +50,7 @@ pub trait PostScraper {
 
 #[async_trait]
 pub trait Post: std::fmt::Debug + Send + Sync {
-    fn should_embed(&self) -> bool;
+    fn should_embed(&self, settings: &Settings) -> bool;
     async fn send_embed(
         &self,
         u: &User,
@@ -56,6 +61,7 @@ pub trait Post: std::fmt::Debug + Send + Sync {
 }
 
 #[macro_export]
+#[cfg(any(feature = "reddit", feature = "ninegag"))]
 macro_rules! nav_json {
     ($json:expr, $base_path:expr, $path:expr) => {
     	$json.and_then(|x| {

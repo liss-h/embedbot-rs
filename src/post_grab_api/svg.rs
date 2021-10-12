@@ -1,7 +1,8 @@
-use serenity::async_trait;
-use tempfile::NamedTempFile;
+#![cfg(feature = "svg")]
 
 use super::*;
+use serenity::async_trait;
+use tempfile::NamedTempFile;
 use tiny_skia::Pixmap;
 
 #[derive(Copy, Clone, Default)]
@@ -49,8 +50,8 @@ impl PostScraper for SvgApi {
 
 #[async_trait]
 impl Post for SvgPost {
-    fn should_embed(&self) -> bool {
-        true
+    fn should_embed(&self, settings: &Settings) -> bool {
+        settings.embed_settings.svg.0
     }
 
     async fn send_embed(

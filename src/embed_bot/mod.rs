@@ -1,29 +1,93 @@
-use std::fmt::Display;
-use std::fs::File;
-use std::path::{Path, PathBuf};
+pub mod interface;
+
+use super::post_grab_api::*;
+use interface::*;
 
 use clap::Clap;
 use serde::{Deserialize, Serialize};
-use serenity::async_trait;
-use serenity::model::channel::Message;
-use serenity::model::gateway::Ready;
-use serenity::model::id::ChannelId;
-use serenity::model::user::User;
-use serenity::prelude::*;
+use serenity::{
+    async_trait,
+    client::{Context, EventHandler},
+    model::{channel::Message, gateway::Ready, id::ChannelId, user::User},
+    prelude::TypeMapKey,
+};
+use std::{
+    collections::HashSet,
+    fmt::Display,
+    fs::File,
+    path::{Path, PathBuf},
+};
 use strum::AsStaticRef;
-
 use url::Url;
 
-use crate::embed_bot::interface::*;
+#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Hash, Debug)]
+pub enum PostType {
+    Text,
+    Gallery,
+    Image,
+    Video,
+}
 
-use super::post_grab_api::*;
+#[derive(Serialize, Deserialize, Debug)]
+#[repr(transparent)]
+pub struct RedditEmbedSet(pub HashSet<PostType>);
 
-pub mod interface;
+#[derive(Serialize, Deserialize, Debug)]
+#[repr(transparent)]
+pub struct NineGagEmbedSet(pub HashSet<PostType>);
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
+#[repr(transparent)]
+pub struct DefaultTrueBool(pub bool);
+
+impl Default for RedditEmbedSet {
+    fn default() -> Self {
+        RedditEmbedSet(
+            std::array::IntoIter::new([
+                PostType::Text,
+                PostType::Gallery,
+                PostType::Image,
+            ])
+            .collect(),
+        )
+    }
+}
+
+impl Default for NineGagEmbedSet {
+    fn default() -> Self {
+        NineGagEmbedSet(std::array::IntoIter::new([PostType::Video]).collect())
+    }
+}
+
+impl Default for DefaultTrueBool {
+    fn default() -> Self {
+        DefaultTrueBool(true)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+pub struct EmbedSettings {
+    #[serde(default)]
+    pub reddit: RedditEmbedSet,
+
+    #[serde(default)]
+    pub ninegag: NineGagEmbedSet,
+
+    #[serde(default)]
+    pub imgur: DefaultTrueBool,
+
+    #[serde(default)]
+    pub svg: DefaultTrueBool,
+}
+
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Settings {
     pub prefix: String,
     pub do_implicit_auto_embed: bool,
+
+    #[serde(default)]
+    pub embed_settings: EmbedSettings,
 }
 
 impl Settings {
@@ -44,6 +108,7 @@ impl Default for Settings {
         Settings {
             prefix: "~".to_string(),
             do_implicit_auto_embed: true,
+            embed_settings: Default::default(),
         }
     }
 }
@@ -80,6 +145,7 @@ impl EmbedBot {
         author: &User,
         url: Url,
         comment: Option<&str>,
+        settings: &Settings,
     ) -> Result<Option<Message>, Box<dyn std::error::Error>> {
         match self.find_api(&url) {
             Some(api) => {
@@ -90,10 +156,8 @@ impl EmbedBot {
                 };
 
                 match api.get_post(url.clone()).await {
-                    Ok(post) if post.should_embed() => {
-                        let msg = post
-                            .send_embed(author, comment, &chan, ctx)
-                            .await?;
+                    Ok(post) if post.should_embed(settings) => {
+                        let msg = post.send_embed(author, comment, &chan, ctx).await?;
 
                         println!("[Info] embedded '{}': {:?}", url, post);
                         Ok(Some(msg))
@@ -144,9 +208,16 @@ impl EventHandler for EmbedBot {
                 match opts {
                     Ok(EmbedBotOpts::Embed { url, comment }) => match Url::parse(&url) {
                         Ok(url) => {
-                            self.embed(&ctx, msg.channel_id, &msg.author, url, comment.as_deref())
-                                .await
-                                .unwrap();
+                            self.embed(
+                                &ctx,
+                                msg.channel_id,
+                                &msg.author,
+                                url,
+                                comment.as_deref(),
+                                settings,
+                            )
+                            .await
+                            .unwrap();
                         }
                         Err(_) => {
                             Self::reply_error(
@@ -202,16 +273,12 @@ impl EventHandler for EmbedBot {
                                 }
                             }
                             Err(e) => {
-                                Self::reply_error(msg.channel_id, &ctx, &e)
-                                    .await
-                                    .unwrap();
+                                Self::reply_error(msg.channel_id, &ctx, &e).await.unwrap();
                             }
                         }
                     }
                     Err(e) => {
-                        Self::reply_error(msg.channel_id, &ctx, &e)
-                            .await
-                            .unwrap();
+                        Self::reply_error(msg.channel_id, &ctx, &e).await.unwrap();
                     }
                 }
             } else if settings.do_implicit_auto_embed {
@@ -237,7 +304,14 @@ impl EventHandler for EmbedBot {
 
                 if let Some(url) = url {
                     let reply = self
-                        .embed(&ctx, msg.channel_id, &msg.author, url, comment.as_deref())
+                        .embed(
+                            &ctx,
+                            msg.channel_id,
+                            &msg.author,
+                            url,
+                            comment.as_deref(),
+                            settings,
+                        )
                         .await
                         .unwrap();
 

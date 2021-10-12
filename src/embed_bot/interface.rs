@@ -1,6 +1,5 @@
-use std::str::FromStr;
-
 use clap::{AppSettings, ArgEnum, Clap, Subcommand};
+use std::str::FromStr;
 use strum::AsStaticStr;
 
 enum SplitState {

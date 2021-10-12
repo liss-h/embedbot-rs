@@ -1,9 +1,10 @@
 use super::Error;
 use reqwest::IntoUrl;
-use serenity::builder::CreateEmbed;
-use serenity::model::prelude::User;
-use std::borrow::Cow;
-use std::str::pattern::{Pattern, ReverseSearcher};
+use serenity::{builder::CreateEmbed, model::user::User};
+use std::{
+    borrow::Cow,
+    str::pattern::{Pattern, ReverseSearcher},
+};
 use url::Url;
 
 pub async fn wget<U: IntoUrl>(url: U, user_agent: &str) -> Result<reqwest::Response, Error> {
@@ -16,6 +17,7 @@ pub async fn wget<U: IntoUrl>(url: U, user_agent: &str) -> Result<reqwest::Respo
         .map_err(Into::into)
 }
 
+#[cfg(feature = "scraper")]
 pub async fn wget_html<U: IntoUrl>(url: U, user_agent: &str) -> Result<scraper::Html, Error> {
     let resp = wget(url, user_agent).await?;
     Ok(scraper::Html::parse_document(&resp.text().await?))

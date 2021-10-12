@@ -1,0 +1,10 @@
+{
+    "prefix": "~",
+    "do_implicit_auto_embed": true,
+    "embed_settings": {
+        "reddit": ["Text", "Gallery", "Image"],
+        "ninegag": ["Image"],
+        "imgur": true,
+        "svg": true
+    }
+}

@@ -1,3 +1,5 @@
+#![cfg(feature = "imgur")]
+
 use super::*;
 use scraper::selector::Selector;
 use serenity::async_trait;
@@ -18,8 +20,8 @@ pub struct ImgurPost {
 
 #[async_trait]
 impl Post for ImgurPost {
-    fn should_embed(&self) -> bool {
-        true
+    fn should_embed(&self, settings: &Settings) -> bool {
+        settings.embed_settings.imgur.0
     }
 
     async fn send_embed(

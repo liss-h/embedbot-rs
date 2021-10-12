@@ -1,9 +1,8 @@
-use serenity::async_trait;
-use serenity::model::user::User;
-
-use crate::nav_json;
+#![cfg(feature = "ninegag")]
 
 use super::*;
+use crate::{embed_bot::PostType, nav_json};
+use serenity::{async_trait, model::user::User};
 
 fn fmt_title(p: &NineGagPost) -> String {
     let em = escape_markdown(&p.title);
@@ -28,8 +27,15 @@ pub struct NineGagPost {
 
 #[async_trait]
 impl Post for NineGagPost {
-    fn should_embed(&self) -> bool {
-        self.post_type != NineGagPostType::Image
+    fn should_embed(&self, settings: &Settings) -> bool {
+        settings
+            .embed_settings
+            .ninegag
+            .0
+            .contains(&match self.post_type {
+                NineGagPostType::Video => PostType::Video,
+                NineGagPostType::Image => PostType::Image,
+            })
     }
 
     async fn send_embed(

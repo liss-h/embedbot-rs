@@ -1,10 +1,9 @@
-use serde_json::Value;
-use serenity::async_trait;
-use serenity::builder::CreateEmbed;
-
-use crate::nav_json;
+#![cfg(feature = "reddit")]
 
 use super::*;
+use crate::{embed_bot::PostType, nav_json};
+use serde_json::Value;
+use serenity::{async_trait, builder::CreateEmbed};
 use std::convert::TryInto;
 
 fn fmt_title(p: &RedditPostCommonData) -> String {
@@ -175,8 +174,17 @@ fn manual_embed(
 
 #[async_trait]
 impl Post for RedditPost {
-    fn should_embed(&self) -> bool {
-        true
+    fn should_embed(&self, settings: &Settings) -> bool {
+        settings
+            .embed_settings
+            .reddit
+            .0
+            .contains(&match self.specialized {
+                RedditPostSpecializedData::Text => PostType::Text,
+                RedditPostSpecializedData::Gallery { .. } => PostType::Gallery,
+                RedditPostSpecializedData::Image { .. } => PostType::Image,
+                RedditPostSpecializedData::Video { .. } => PostType::Video,
+            })
     }
 
     async fn send_embed(

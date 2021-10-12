@@ -1,16 +1,12 @@
 #![feature(pattern, iter_intersperse)]
 
-use std::fs::File;
-
-use clap::Clap;
-use serenity::Client;
-
-use post_grab_api::*;
-
-use crate::embed_bot::{EmbedBot, Settings};
-
 mod embed_bot;
 mod post_grab_api;
+
+use clap::Clap;
+use embed_bot::{EmbedBot, Settings};
+use serenity::Client;
+use std::fs::File;
 
 #[derive(Clap)]
 struct Opts {
@@ -22,18 +18,35 @@ struct Opts {
 async fn main() {
     let opts: Opts = Opts::parse();
 
-    let settings: Settings = File::open(&opts.settings_file)
-        .map(|f| serde_json::from_reader(f).unwrap())
-        .unwrap_or_default();
+    let settings = match File::open(&opts.settings_file) {
+        Ok(f) => {
+            let s: Settings = serde_json::from_reader(f).unwrap();
+            println!("Loaded Config: {:#?}", s);
+            s
+        },
+        Err(_) => {
+            let s = Settings::default();
+            println!("Unable to open config file, using defaults: {:#?}", s);
+            s
+        }
+    };
 
     let tok = std::env::var("DISCORD_TOKEN").expect("ENVVAR 'DISCORD_TOKEN' not found");
 
     let embed_bot = {
         let mut e = EmbedBot::new(&opts.settings_file);
-        e.register_api(reddit::RedditAPI::default());
-        e.register_api(ninegag::NineGagAPI::default());
-        e.register_api(imgur::ImgurAPI::default());
-        e.register_api(svg::SvgApi::default());
+
+        #[cfg(feature = "reddit")]
+        e.register_api(post_grab_api::reddit::RedditAPI::default());
+
+        #[cfg(feature = "ninegag")]
+        e.register_api(post_grab_api::ninegag::NineGagAPI::default());
+
+        #[cfg(feature = "imgur")]
+        e.register_api(post_grab_api::imgur::ImgurAPI::default());
+
+        #[cfg(feature = "svg")]
+        e.register_api(post_grab_api::svg::SvgApi::default());
 
         e
     };
