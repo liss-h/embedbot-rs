@@ -3,6 +3,6 @@ services:
     embed_bot:
         build: .
         volumes:
-            - ./embedbot.conf.default.default:/etc/embedbot.conf.default
+            - ./embedbot.conf.default:/etc/embedbot.conf
         environment:
             - DISCORD_TOKEN=
