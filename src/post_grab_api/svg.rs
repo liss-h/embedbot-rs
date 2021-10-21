@@ -1,7 +1,11 @@
 #![cfg(feature = "svg")]
 
-use super::*;
-use serenity::async_trait;
+use super::{wget, Error, Post, PostScraper, Settings, Url, USER_AGENT};
+use serenity::{
+    async_trait,
+    client::Context,
+    model::{channel::Message, id::ChannelId, user::User},
+};
 use tempfile::NamedTempFile;
 use tiny_skia::Pixmap;
 
@@ -15,7 +19,7 @@ pub struct SvgPost {
 }
 
 impl SvgApi {
-    async fn scrape_post(&self, url: Url) -> Result<SvgPost, Error> {
+    async fn scrape_post(url: Url) -> Result<SvgPost, Error> {
         let res = wget(url.clone(), USER_AGENT).await?;
         let svg_str = res.text().await?;
 
@@ -40,11 +44,16 @@ impl SvgApi {
 #[async_trait]
 impl PostScraper for SvgApi {
     fn is_suitable(&self, url: &Url) -> bool {
-        url.path().trim_end_matches('/').ends_with(".svg")
+        url.path()
+            .trim_end_matches('/')
+            .rsplit('.')
+            .next()
+            .map(|ext| ext.eq_ignore_ascii_case("svg"))
+            == Some(true)
     }
 
     async fn get_post(&self, url: Url) -> Result<Box<dyn Post>, Error> {
-        Ok(Box::new(self.scrape_post(url).await?))
+        Ok(Box::new(Self::scrape_post(url).await?))
     }
 }
 
@@ -58,7 +67,7 @@ impl Post for SvgPost {
         &self,
         u: &User,
         comment: Option<&str>,
-        chan: &ChannelId,
+        chan: ChannelId,
         ctx: &Context,
     ) -> Result<Message, Box<dyn std::error::Error>> {
         let msg = chan
@@ -94,9 +103,10 @@ mod tests {
     #[tokio::test]
     async fn svg_grab() {
         let url = "https://raw.githubusercontent.com/memononen/nanosvg/master/example/nano.svg"; // "https://upload.wikimedia.org/wikipedia/commons/0/09/Fedora_logo_and_wordmark.svg";
-        let api = SvgApi::default();
-        let post = api.scrape_post(Url::from_str(url).unwrap()).await.unwrap();
+        let post = SvgApi::scrape_post(Url::from_str(url).unwrap())
+            .await
+            .unwrap();
 
-        println!("{:?}", post.0.keep().unwrap().1);
+        println!("{:?}", post.converted.keep().unwrap().1);
     }
 }

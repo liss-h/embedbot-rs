@@ -1,8 +1,16 @@
 #![cfg(feature = "ninegag")]
 
-use super::*;
+use super::{
+    escape_markdown, limit_len, wget_html, Error, Post, PostScraper, Settings, EMBED_TITLE_MAX_LEN,
+    USER_AGENT,
+};
 use crate::{embed_bot::PostType, nav_json};
-use serenity::{async_trait, model::user::User};
+use serenity::{
+    async_trait,
+    client::Context,
+    model::{channel::Message, id::ChannelId, user::User},
+};
+use url::Url;
 
 fn fmt_title(p: &NineGagPost) -> String {
     let em = escape_markdown(&p.title);
@@ -42,7 +50,7 @@ impl Post for NineGagPost {
         &self,
         u: &User,
         comment: Option<&str>,
-        chan: &ChannelId,
+        chan: ChannelId,
         ctx: &Context,
     ) -> Result<Message, Box<dyn std::error::Error>> {
         let msg = chan.send_message(ctx, |m| {

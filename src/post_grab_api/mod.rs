@@ -55,7 +55,7 @@ pub trait Post: std::fmt::Debug + Send + Sync {
         &self,
         u: &User,
         comment: Option<&str>,
-        chan: &ChannelId,
+        chan: ChannelId,
         ctx: &Context,
     ) -> Result<Message, Box<dyn std::error::Error>>;
 }

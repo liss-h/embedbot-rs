@@ -1,7 +1,7 @@
 pub mod interface;
 
-use super::post_grab_api::*;
-use interface::*;
+use super::post_grab_api::PostScraper;
+use interface::{command_line_split, EmbedBotOpts, SettingsOptions, SettingsSubcommand};
 
 use clap::Clap;
 use serde::{Deserialize, Serialize};
@@ -43,19 +43,16 @@ pub struct DefaultTrueBool(pub bool);
 impl Default for RedditEmbedSet {
     fn default() -> Self {
         RedditEmbedSet(
-            std::array::IntoIter::new([
-                PostType::Text,
-                PostType::Gallery,
-                PostType::Image,
-            ])
-            .collect(),
+            [PostType::Text, PostType::Gallery, PostType::Image]
+                .into_iter()
+                .collect(),
         )
     }
 }
 
 impl Default for NineGagEmbedSet {
     fn default() -> Self {
-        NineGagEmbedSet(std::array::IntoIter::new([PostType::Video]).collect())
+        NineGagEmbedSet([PostType::Video].into_iter().collect())
     }
 }
 
@@ -80,7 +77,6 @@ pub struct EmbedSettings {
     pub svg: DefaultTrueBool,
 }
 
-
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Settings {
     pub prefix: String,
@@ -91,7 +87,7 @@ pub struct Settings {
 }
 
 impl Settings {
-    pub fn display_value(&self, opt: SettingsOptions) -> &dyn Display {
+    pub fn display_value(&self, opt: &SettingsOptions) -> &dyn Display {
         match opt {
             SettingsOptions::Prefix => &self.prefix,
             SettingsOptions::DoImplicitAutoEmbed => &self.do_implicit_auto_embed,
@@ -108,7 +104,7 @@ impl Default for Settings {
         Settings {
             prefix: "~".to_string(),
             do_implicit_auto_embed: true,
-            embed_settings: Default::default(),
+            embed_settings: EmbedSettings::default(),
         }
     }
 }
@@ -131,7 +127,7 @@ impl EmbedBot {
         self.apis
             .iter()
             .find(|a| a.is_suitable(url))
-            .map(|a| a.as_ref())
+            .map(AsRef::as_ref)
     }
 
     pub fn register_api<T: 'static + PostScraper + Send + Sync>(&mut self, api: T) {
@@ -147,35 +143,32 @@ impl EmbedBot {
         comment: Option<&str>,
         settings: &Settings,
     ) -> Result<Option<Message>, Box<dyn std::error::Error>> {
-        match self.find_api(&url) {
-            Some(api) => {
-                let url = {
-                    let mut u = url.clone();
-                    u.set_fragment(None);
-                    u
-                };
+        if let Some(api) = self.find_api(&url) {
+            let url = {
+                let mut u = url.clone();
+                u.set_fragment(None);
+                u
+            };
 
-                match api.get_post(url.clone()).await {
-                    Ok(post) if post.should_embed(settings) => {
-                        let msg = post.send_embed(author, comment, &chan, ctx).await?;
+            match api.get_post(url.clone()).await {
+                Ok(post) if post.should_embed(settings) => {
+                    let msg = post.send_embed(author, comment, chan, ctx).await?;
 
-                        println!("[Info] embedded '{}': {:?}", url, post);
-                        Ok(Some(msg))
-                    }
-                    Ok(_) => {
-                        println!("[Info] ignoring '{}'. Reason: not supposed to embed", url);
-                        Ok(None)
-                    }
-                    Err(e) => {
-                        eprintln!("[Error] could not fetch post. Reason: {:?}", e);
-                        Ok(None)
-                    }
+                    println!("[Info] embedded '{}': {:?}", url, post);
+                    Ok(Some(msg))
+                }
+                Ok(_) => {
+                    println!("[Info] ignoring '{}'. Reason: not supposed to embed", url);
+                    Ok(None)
+                }
+                Err(e) => {
+                    eprintln!("[Error] could not fetch post. Reason: {:?}", e);
+                    Ok(None)
                 }
             }
-            None => {
-                println!("[Info] ignoring '{}'. Reason: no api available", url);
-                Ok(None)
-            }
+        } else {
+            println!("[Info] ignoring '{}'. Reason: no api available", url);
+            Ok(None)
         }
     }
 
@@ -236,7 +229,7 @@ impl EventHandler for EmbedBot {
                             &format!(
                                 "```c\n{key} == {value}\n```",
                                 key = key.as_static(),
-                                value = settings.display_value(key)
+                                value = settings.display_value(&key)
                             ),
                         )
                         .await

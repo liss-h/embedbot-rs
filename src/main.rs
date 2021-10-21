@@ -23,10 +23,13 @@ async fn main() {
             let s: Settings = serde_json::from_reader(f).unwrap();
             println!("Loaded Config: {:#?}", s);
             s
-        },
-        Err(_) => {
+        }
+        Err(e) => {
             let s = Settings::default();
-            println!("Unable to open config file, using defaults: {:#?}", s);
+            println!(
+                "Unable to open config file (E: {:?}), using defaults: {:#?}",
+                e, s
+            );
             s
         }
     };

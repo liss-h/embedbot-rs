@@ -1,10 +1,20 @@
 #![cfg(feature = "reddit")]
 
-use super::*;
+use super::{
+    escape_markdown, include_author_comment, limit_descr_len, limit_len, url_path_ends_with,
+    url_path_ends_with_image_extension, wget_json, Error, Post, PostScraper, Settings,
+    EMBED_TITLE_MAX_LEN, USER_AGENT,
+};
 use crate::{embed_bot::PostType, nav_json};
 use serde_json::Value;
-use serenity::{async_trait, builder::CreateEmbed};
+use serenity::{
+    async_trait,
+    builder::CreateEmbed,
+    client::Context,
+    model::{channel::Message, id::ChannelId, user::User},
+};
 use std::convert::TryInto;
+use url::Url;
 
 fn fmt_title(p: &RedditPostCommonData) -> String {
     let flair = (!p.flair.is_empty())
@@ -191,7 +201,7 @@ impl Post for RedditPost {
         &self,
         u: &User,
         comment: Option<&str>,
-        chan: &ChannelId,
+        chan: ChannelId,
         ctx: &Context,
     ) -> Result<Message, Box<dyn std::error::Error>> {
         let msg = chan
@@ -251,7 +261,7 @@ impl Post for RedditPost {
 pub struct RedditAPI;
 
 impl RedditAPI {
-    fn analyze_post(&self, url: Url, json: Value) -> Result<RedditPost, Error> {
+    fn analyze_post(url: Url, json: &Value) -> Result<RedditPost, Error> {
         let top_level_post = nav_json! {
             json => 0 => "data" => "children" => 0 => "data";
             as object
@@ -341,8 +351,8 @@ impl RedditAPI {
                 }
             }
 
-            _ => match post_json.get("media_metadata") {
-                Some(Value::Object(meta)) => {
+            _ => {
+                if let Some(Value::Object(meta)) = post_json.get("media_metadata") {
                     let mut urls = meta
                         .iter()
                         .map(|(_key, imgmeta)| {
@@ -360,8 +370,7 @@ impl RedditAPI {
                     } else {
                         RedditPostSpecializedData::Gallery { img_urls: urls }
                     }
-                }
-                _ => {
+                } else {
                     let url =
                         Url::parse(nav_json! { post_json => "url"; as str }?).or(alt_embed_url);
 
@@ -375,7 +384,7 @@ impl RedditAPI {
                         _ => RedditPostSpecializedData::Text,
                     }
                 }
-            },
+            }
         };
 
         Ok(RedditPost {
@@ -395,7 +404,7 @@ impl RedditAPI {
             (u, wget_json(get_url, USER_AGENT).await?)
         };
 
-        self.analyze_post(url, json)
+        Self::analyze_post(url, &json)
     }
 }
 
@@ -422,9 +431,8 @@ mod tests {
         const JSON: &str = include_str!("../../test_data/reddit/image.json");
         let json: Value = serde_json::from_str(JSON).unwrap();
 
-        let api = RedditAPI::default();
         let url = "https://www.reddit.com/r/Awwducational/comments/oi687m/a_very_rare_irrawaddy_dolphin_only_92_are/";
-        let post = api.analyze_post(Url::from_str(url).unwrap(), json).unwrap();
+        let post = RedditAPI::analyze_post(Url::from_str(url).unwrap(), &json).unwrap();
 
         let expected = RedditPost {
             common: RedditPostCommonData {
@@ -449,9 +457,8 @@ mod tests {
         const JSON: &str = include_str!("../../test_data/reddit/video.json");
         let json: Value = serde_json::from_str(JSON).unwrap();
 
-        let api = RedditAPI::default();
         let url = "https://www.reddit.com/r/aww/comments/oi6lfk/mama_cat_wants_her_kitten_to_be_friends_with/";
-        let post = api.analyze_post(Url::from_str(url).unwrap(), json).unwrap();
+        let post = RedditAPI::analyze_post(Url::from_str(url).unwrap(), &json).unwrap();
 
         let expected = RedditPost {
             common: RedditPostCommonData {
@@ -478,9 +485,8 @@ mod tests {
         const JSON: &str = include_str!("../../test_data/reddit/gallery.json");
         let json: Value = serde_json::from_str(JSON).unwrap();
 
-        let api = RedditAPI::default();
         let url = "https://www.reddit.com/r/watercooling/comments/ohvv5w/lian_li_o11d_xl_with_2x_3090_sli_triple_radiator/";
-        let post = api.analyze_post(Url::from_str(url).unwrap(), json).unwrap();
+        let post = RedditAPI::analyze_post(Url::from_str(url).unwrap(), &json).unwrap();
 
         let expected = RedditPost {
             common: RedditPostCommonData {
