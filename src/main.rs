@@ -3,12 +3,12 @@
 mod embed_bot;
 mod post_grab_api;
 
-use clap::Clap;
+use clap::Parser;
 use embed_bot::{EmbedBot, Settings};
 use serenity::Client;
 use std::fs::File;
 
-#[derive(Clap)]
+#[derive(Parser)]
 struct Opts {
     #[clap(short = 's', long = "settings-file")]
     settings_file: String,

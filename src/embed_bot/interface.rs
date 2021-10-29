@@ -1,6 +1,6 @@
-use clap::{AppSettings, ArgEnum, Clap, Subcommand};
+use clap::{AppSettings, ArgEnum, Parser, Subcommand};
 use std::str::FromStr;
-use strum::AsStaticStr;
+use strum::{AsStaticStr, EnumVariantNames, VariantNames};
 
 enum SplitState {
     Default,
@@ -41,7 +41,7 @@ pub fn command_line_split(cmdl: &str) -> impl Iterator<Item = &str> {
     .map(strip_quotes)
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 #[clap(setting = AppSettings::NoBinaryName)]
 pub enum EmbedBotOpts {
     #[clap(flatten, about = "Change or view the bot settings")]
@@ -73,7 +73,7 @@ pub enum SettingsSubcommand {
     },
 }
 
-#[derive(ArgEnum, Debug, AsStaticStr, PartialEq)]
+#[derive(ArgEnum, Debug, AsStaticStr, EnumVariantNames, PartialEq, Clone, Copy)]
 #[strum(serialize_all = "kebab-case")]
 pub enum SettingsOptions {
     DoImplicitAutoEmbed,

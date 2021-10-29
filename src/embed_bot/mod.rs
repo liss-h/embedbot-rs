@@ -3,7 +3,7 @@ pub mod interface;
 use super::post_grab_api::PostScraper;
 use interface::{command_line_split, EmbedBotOpts, SettingsOptions, SettingsSubcommand};
 
-use clap::Clap;
+use clap::Parser;
 use serde::{Deserialize, Serialize};
 use serenity::{
     async_trait,
