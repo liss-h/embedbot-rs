@@ -28,9 +28,15 @@ pub enum PostType {
     Video,
 }
 
+#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Hash, Debug)]
+pub enum Crossposted {
+    Crosspost,
+    NonCrosspost,
+    Any,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
-#[repr(transparent)]
-pub struct RedditEmbedSet(pub HashSet<PostType>);
+pub struct RedditEmbedSet(pub HashSet<(PostType, Crossposted)>);
 
 #[derive(Serialize, Deserialize, Debug)]
 #[repr(transparent)]
@@ -43,9 +49,14 @@ pub struct DefaultTrueBool(pub bool);
 impl Default for RedditEmbedSet {
     fn default() -> Self {
         RedditEmbedSet(
-            [PostType::Text, PostType::Gallery, PostType::Image]
-                .into_iter()
-                .collect(),
+            [
+                (PostType::Text, Crossposted::Any),
+                (PostType::Gallery, Crossposted::Any),
+                (PostType::Image, Crossposted::Any),
+                (PostType::Video, Crossposted::Crosspost),
+            ]
+            .into_iter()
+            .collect(),
         )
     }
 }

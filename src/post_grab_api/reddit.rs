@@ -5,6 +5,7 @@ use super::{
     url_path_ends_with_image_extension, wget_json, Error, Post, PostScraper, Settings,
     EMBED_TITLE_MAX_LEN, USER_AGENT,
 };
+use crate::embed_bot::Crossposted;
 use crate::{embed_bot::PostType, nav_json};
 use serde_json::Value;
 use serenity::{
@@ -185,16 +186,21 @@ fn manual_embed(
 #[async_trait]
 impl Post for RedditPost {
     fn should_embed(&self, settings: &Settings) -> bool {
-        settings
-            .embed_settings
-            .reddit
-            .0
-            .contains(&match self.specialized {
-                RedditPostSpecializedData::Text => PostType::Text,
-                RedditPostSpecializedData::Gallery { .. } => PostType::Gallery,
-                RedditPostSpecializedData::Image { .. } => PostType::Image,
-                RedditPostSpecializedData::Video { .. } => PostType::Video,
-            })
+        let ptype = match &self.specialized {
+            RedditPostSpecializedData::Text => PostType::Text,
+            RedditPostSpecializedData::Gallery { .. } => PostType::Gallery,
+            RedditPostSpecializedData::Image { .. } => PostType::Image,
+            RedditPostSpecializedData::Video { .. } => PostType::Video,
+        };
+
+        let porig = match &self.common.subreddit {
+            RedditPostOrigin::JustSubreddit(_) => Crossposted::NonCrosspost,
+            RedditPostOrigin::Crossposted { .. } => Crossposted::Crosspost,
+        };
+
+        let s = &settings.embed_settings.reddit.0;
+
+        s.contains(&(ptype, Crossposted::Any)) || s.contains(&(ptype, porig))
     }
 
     async fn send_embed(

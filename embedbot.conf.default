@@ -2,7 +2,7 @@
     "prefix": "~",
     "do_implicit_auto_embed": true,
     "embed_settings": {
-        "reddit": ["Text", "Gallery", "Image"],
+        "reddit": [["Text", "Any"], ["Gallery", "Any"], ["Image", "Any"], ["Video", "Crosspost"]],
         "ninegag": ["Image"],
         "imgur": true,
         "svg": true
