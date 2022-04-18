@@ -1,8 +1,7 @@
 #![cfg(feature = "imgur")]
 
 use super::{
-    escape_markdown, limit_len, wget_html, Error, Post, PostScraper, Settings, EMBED_TITLE_MAX_LEN,
-    USER_AGENT,
+    escape_markdown, limit_len, wget_html, Error, Post, PostScraper, Settings, EMBED_TITLE_MAX_LEN, USER_AGENT,
 };
 use scraper::selector::Selector;
 use serenity::{

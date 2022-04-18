@@ -1,6 +1,4 @@
-use clap::{AppSettings, ArgEnum, Parser, Subcommand};
-use std::str::FromStr;
-use strum::{AsStaticStr, EnumVariantNames, VariantNames};
+use clap::{ArgEnum, Parser, Subcommand};
 
 enum SplitState {
     Default,
@@ -42,48 +40,41 @@ pub fn command_line_split(cmdl: &str) -> impl Iterator<Item = &str> {
 }
 
 #[derive(Parser, Debug)]
-#[clap(setting = AppSettings::NoBinaryName)]
 pub enum EmbedBotOpts {
-    #[clap(flatten, about = "Change or view the bot settings")]
+    /// Change or view the bot settings
+    #[clap(flatten)]
     Settings(SettingsSubcommand),
     Embed {
         url: String,
 
-        #[clap(short = 'c', long = "comment")]
+        #[clap(short, long)]
         comment: Option<String>,
     },
 }
 
 #[derive(Subcommand, Debug)]
-#[clap(setting = AppSettings::SubcommandRequired)]
+#[clap(subcommand_required = true)]
 pub enum SettingsSubcommand {
-    #[clap(about = "Sets a bot setting to a new value")]
+    /// Sets a bot setting to a new value
     Set {
-        #[clap(about = "the setting to change", possible_values = SettingsOptions::VARIANTS)]
+        /// the setting to change
+        #[clap(arg_enum)]
         key: SettingsOptions,
 
-        #[clap(about = "the desired value")]
+        /// the desired value
         value: String,
     },
 
-    #[clap(about = "Displays the current value of a setting")]
+    /// Displays the current value of a setting
     Get {
-        #[clap(about = "The setting value to display", possible_values = SettingsOptions::VARIANTS)]
+        /// The setting value to display
+        #[clap(arg_enum)]
         key: SettingsOptions,
     },
 }
 
-#[derive(ArgEnum, Debug, AsStaticStr, EnumVariantNames, PartialEq, Clone, Copy)]
-#[strum(serialize_all = "kebab-case")]
+#[derive(ArgEnum, Debug, PartialEq, Clone, Copy)]
 pub enum SettingsOptions {
     DoImplicitAutoEmbed,
     Prefix,
-}
-
-impl FromStr for SettingsOptions {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        <Self as ArgEnum>::from_str(s, true)
-    }
 }

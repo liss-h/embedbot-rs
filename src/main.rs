@@ -10,7 +10,7 @@ use std::fs::File;
 
 #[derive(Parser)]
 struct Opts {
-    #[clap(short = 's', long = "settings-file")]
+    #[clap(short, long)]
     settings_file: String,
 }
 
@@ -26,10 +26,7 @@ async fn main() {
         }
         Err(e) => {
             let s = Settings::default();
-            println!(
-                "Unable to open config file (E: {:?}), using defaults: {:#?}",
-                e, s
-            );
+            println!("Unable to open config file (E: {:?}), using defaults: {:#?}", e, s);
             s
         }
     };

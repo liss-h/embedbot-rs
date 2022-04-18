@@ -1,8 +1,7 @@
 #![cfg(feature = "ninegag")]
 
 use super::{
-    escape_markdown, limit_len, wget_html, Error, Post, PostScraper, Settings, EMBED_TITLE_MAX_LEN,
-    USER_AGENT,
+    escape_markdown, limit_len, wget_html, Error, Post, PostScraper, Settings, EMBED_TITLE_MAX_LEN, USER_AGENT,
 };
 use crate::{embed_bot::PostType, nav_json};
 use serenity::{
@@ -36,14 +35,10 @@ pub struct NineGagPost {
 #[async_trait]
 impl Post for NineGagPost {
     fn should_embed(&self, settings: &Settings) -> bool {
-        settings
-            .embed_settings
-            .ninegag
-            .0
-            .contains(&match self.post_type {
-                NineGagPostType::Video => PostType::Video,
-                NineGagPostType::Image => PostType::Image,
-            })
+        settings.embed_settings.ninegag.0.contains(&match self.post_type {
+            NineGagPostType::Video => PostType::Video,
+            NineGagPostType::Image => PostType::Image,
+        })
     }
 
     async fn send_embed(
@@ -53,20 +48,12 @@ impl Post for NineGagPost {
         chan: ChannelId,
         ctx: &Context,
     ) -> Result<Message, Box<dyn std::error::Error>> {
-        let msg = chan.send_message(ctx, |m| {
-            match self.post_type {
-                NineGagPostType::Image => {
-                    m.embed(|e| e.title(&self.title).url(&self.src).image(&self.embed_url))
-                }
+        let msg = chan
+            .send_message(ctx, |m| match self.post_type {
+                NineGagPostType::Image => m.embed(|e| e.title(&self.title).url(&self.src).image(&self.embed_url)),
                 NineGagPostType::Video => {
                     let discord_comment = comment
-                        .map(|c| {
-                            format!(
-                                "**Comment By {author}:**\n{comment}\n\n",
-                                author = u.name,
-                                comment = c
-                            )
-                        })
+                        .map(|c| format!("**Comment By {author}:**\n{comment}\n\n", author = u.name, comment = c))
                         .unwrap_or_default();
 
                     m.content(format!(
@@ -78,9 +65,8 @@ impl Post for NineGagPost {
                         title = fmt_title(self),
                     ))
                 }
-            }
-        })
-        .await?;
+            })
+            .await?;
 
         Ok(msg)
     }
@@ -116,7 +102,7 @@ impl PostScraper for NineGagAPI {
                 .ok_or(Error::JsonNav("could not find json"))?
                 .text()
                 .collect::<String>()
-                .replace("\\", "");
+                .replace('\\', "");
 
             serde_json::from_str(&script_text[29..(script_text.len() - 3)])?
         };
@@ -132,8 +118,7 @@ impl PostScraper for NineGagAPI {
             "Animated" => {
                 let imgs = nav_json! { post_json => "images"; as object }?;
 
-                let img_alts = nav_json! { imgs => "image460svwm" }
-                    .or_else(|_| nav_json! { imgs => "image460sv" })?;
+                let img_alts = nav_json! { imgs => "image460svwm" }.or_else(|_| nav_json! { imgs => "image460sv" })?;
 
                 (
                     NineGagPostType::Video,

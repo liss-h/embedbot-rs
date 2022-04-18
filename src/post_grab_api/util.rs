@@ -24,11 +24,7 @@ pub async fn wget_html<U: IntoUrl>(url: U, user_agent: &str) -> Result<scraper::
 }
 
 pub async fn wget_json<U: IntoUrl>(url: U, user_agent: &str) -> Result<serde_json::Value, Error> {
-    wget(url, user_agent)
-        .await?
-        .json()
-        .await
-        .map_err(Into::into)
+    wget(url, user_agent).await?.json().await.map_err(Into::into)
 }
 
 pub fn url_path_ends_with<'a, P>(haystack: &'a Url, needle: P) -> bool
@@ -83,12 +79,7 @@ pub fn limit_len(text: &str, limit: usize) -> Cow<str> {
     const SHORTENED_MARKER: &str = " [...]";
 
     if text.len() > limit {
-        format!(
-            "{}{}",
-            &text[..(limit - SHORTENED_MARKER.len())],
-            SHORTENED_MARKER
-        )
-        .into()
+        format!("{}{}", &text[..(limit - SHORTENED_MARKER.len())], SHORTENED_MARKER).into()
     } else {
         text.into()
     }
@@ -98,11 +89,7 @@ pub fn limit_descr_len(text: &str) -> Cow<'_, str> {
     limit_len(text, EMBED_CONTENT_MAX_LEN)
 }
 
-pub fn include_author_comment<'a>(
-    e: &'a mut CreateEmbed,
-    u: &User,
-    comment: &str,
-) -> &'a mut CreateEmbed {
+pub fn include_author_comment<'a>(e: &'a mut CreateEmbed, u: &User, comment: &str) -> &'a mut CreateEmbed {
     let title = format!("Comment by {author}", author = u.name);
     e.field(title, comment, false)
 }

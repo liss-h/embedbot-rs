@@ -73,13 +73,7 @@ impl Post for SvgPost {
         let msg = chan
             .send_files(ctx, [self.converted.path()], |m| {
                 let discord_comment = comment
-                    .map(|c| {
-                        format!(
-                            "**Comment By {author}:**\n{comment}\n\n",
-                            author = u.name,
-                            comment = c
-                        )
-                    })
+                    .map(|c| format!("**Comment By {author}:**\n{comment}\n\n", author = u.name, comment = c))
                     .unwrap_or_default();
 
                 m.content(format!(
@@ -103,9 +97,7 @@ mod tests {
     #[tokio::test]
     async fn svg_grab() {
         let url = "https://raw.githubusercontent.com/memononen/nanosvg/master/example/nano.svg"; // "https://upload.wikimedia.org/wikipedia/commons/0/09/Fedora_logo_and_wordmark.svg";
-        let post = SvgApi::scrape_post(Url::from_str(url).unwrap())
-            .await
-            .unwrap();
+        let post = SvgApi::scrape_post(Url::from_str(url).unwrap()).await.unwrap();
 
         println!("{:?}", post.converted.keep().unwrap().1);
     }

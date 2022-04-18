@@ -3,7 +3,7 @@ pub mod interface;
 use super::post_grab_api::PostScraper;
 use interface::{command_line_split, EmbedBotOpts, SettingsOptions, SettingsSubcommand};
 
-use clap::Parser;
+use clap::{ArgEnum, Parser};
 use serde::{Deserialize, Serialize};
 use serenity::{
     async_trait,
@@ -17,7 +17,6 @@ use std::{
     fs::File,
     path::{Path, PathBuf},
 };
-use strum::AsStaticRef;
 use url::Url;
 
 #[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Hash, Debug)]
@@ -135,10 +134,7 @@ impl EmbedBot {
     }
 
     pub fn find_api(&self, url: &Url) -> Option<&(dyn PostScraper + Send + Sync)> {
-        self.apis
-            .iter()
-            .find(|a| a.is_suitable(url))
-            .map(AsRef::as_ref)
+        self.apis.iter().find(|a| a.is_suitable(url)).map(AsRef::as_ref)
     }
 
     pub fn register_api<T: 'static + PostScraper + Send + Sync>(&mut self, api: T) {
@@ -184,10 +180,8 @@ impl EmbedBot {
     }
 
     async fn reply_success(chan: ChannelId, ctx: &Context, msg: &str) -> serenity::Result<Message> {
-        chan.send_message(ctx, |m| {
-            m.content(format!(":white_check_mark: Success\n{}", msg))
-        })
-        .await
+        chan.send_message(ctx, |m| m.content(format!(":white_check_mark: Success\n{}", msg)))
+            .await
     }
 
     async fn reply_error(chan: ChannelId, ctx: &Context, msg: &str) -> serenity::Result<Message> {
@@ -204,33 +198,21 @@ impl EventHandler for EmbedBot {
             let mut settings = data.get_mut::<Settings>().unwrap();
 
             if msg.content.starts_with(&settings.prefix) {
-                let opts = EmbedBotOpts::try_parse_from(command_line_split(
-                    msg.content.trim_start_matches(&settings.prefix),
-                ))
-                .map_err(|e| format!("```{}```", e));
+                let opts =
+                    EmbedBotOpts::try_parse_from(command_line_split(msg.content.trim_start_matches(&settings.prefix)))
+                        .map_err(|e| format!("```{}```", e));
 
                 match opts {
                     Ok(EmbedBotOpts::Embed { url, comment }) => match Url::parse(&url) {
                         Ok(url) => {
-                            self.embed(
-                                &ctx,
-                                msg.channel_id,
-                                &msg.author,
-                                url,
-                                comment.as_deref(),
-                                settings,
-                            )
-                            .await
-                            .unwrap();
+                            self.embed(&ctx, msg.channel_id, &msg.author, url, comment.as_deref(), settings)
+                                .await
+                                .unwrap();
                         }
                         Err(_) => {
-                            Self::reply_error(
-                                msg.channel_id,
-                                &ctx,
-                                &format!("could not parse url: {}", url),
-                            )
-                            .await
-                            .unwrap();
+                            Self::reply_error(msg.channel_id, &ctx, &format!("could not parse url: {}", url))
+                                .await
+                                .unwrap();
                         }
                     },
                     Ok(EmbedBotOpts::Settings(SettingsSubcommand::Get { key })) => {
@@ -239,7 +221,7 @@ impl EventHandler for EmbedBot {
                             &ctx,
                             &format!(
                                 "```c\n{key} == {value}\n```",
-                                key = key.as_static(),
+                                key = key.to_possible_value().unwrap().get_name(),
                                 value = settings.display_value(&key)
                             ),
                         )
@@ -266,7 +248,7 @@ impl EventHandler for EmbedBot {
                             Ok(()) => {
                                 let m = format!(
                                     "```c\n{key} := {value}\n```",
-                                    key = key.as_static(),
+                                    key = key.to_possible_value().unwrap().get_name(),
                                     value = value
                                 );
 
@@ -308,14 +290,7 @@ impl EventHandler for EmbedBot {
 
                 if let Some(url) = url {
                     let reply = self
-                        .embed(
-                            &ctx,
-                            msg.channel_id,
-                            &msg.author,
-                            url,
-                            comment.as_deref(),
-                            settings,
-                        )
+                        .embed(&ctx, msg.channel_id, &msg.author, url, comment.as_deref(), settings)
                         .await
                         .unwrap();
 
