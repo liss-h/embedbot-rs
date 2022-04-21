@@ -35,6 +35,7 @@ impl Post for ImgurPost {
         &self,
         u: &User,
         _comment: Option<&str>,
+        _ignore_nsfw: bool,
         chan: ChannelId,
         ctx: &Context,
     ) -> Result<Message, Box<dyn std::error::Error>> {

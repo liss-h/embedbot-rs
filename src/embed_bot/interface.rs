@@ -40,15 +40,23 @@ pub fn command_line_split(cmdl: &str) -> impl Iterator<Item = &str> {
 }
 
 #[derive(Parser, Debug)]
+#[clap(no_binary_name = true)]
 pub enum EmbedBotOpts {
-    /// Change or view the bot settings
+    /// change or view the bot settings
     #[clap(flatten)]
     Settings(SettingsSubcommand),
+
+    /// embed a post
     Embed {
         url: String,
 
+        /// a personal comment to include
         #[clap(short, long)]
         comment: Option<String>,
+
+        /// embed fully even if post is flagged as nsfw
+        #[clap(long)]
+        ignore_nsfw: bool,
     },
 }
 
@@ -65,9 +73,9 @@ pub enum SettingsSubcommand {
         value: String,
     },
 
-    /// Displays the current value of a setting
+    /// display the current value of a setting
     Get {
-        /// The setting value to display
+        /// the setting value to display
         #[clap(arg_enum)]
         key: SettingsOptions,
     },

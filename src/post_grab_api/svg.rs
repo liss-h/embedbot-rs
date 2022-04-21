@@ -67,6 +67,7 @@ impl Post for SvgPost {
         &self,
         u: &User,
         comment: Option<&str>,
+        _ignore_nsfw: bool,
         chan: ChannelId,
         ctx: &Context,
     ) -> Result<Message, Box<dyn std::error::Error>> {

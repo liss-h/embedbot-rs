@@ -187,12 +187,13 @@ impl Post for RedditPost {
         &self,
         u: &User,
         comment: Option<&str>,
+        ignore_nsfw: bool,
         chan: ChannelId,
         ctx: &Context,
     ) -> Result<Message, Box<dyn std::error::Error>> {
         let msg = chan
             .send_message(ctx, |m| match self.common.show_mode {
-                RedditPostShowMode::Nsfw => m.embed(|e| {
+                RedditPostShowMode::Nsfw if !ignore_nsfw => m.embed(|e| {
                     e.title(fmt_title(&self.common))
                         .description("Warning NSFW: Click to view content")
                         .author(|a| a.name(&u.name))
@@ -221,7 +222,7 @@ impl Post for RedditPost {
                     e
                 }),
 
-                RedditPostShowMode::Default => match &self.specialized {
+                _ => match &self.specialized {
                     RedditPostSpecializedData::Text => m.embed(|e| base_embed(e, u, comment, self)),
                     RedditPostSpecializedData::Image { img_url } => {
                         m.embed(|e| base_embed(e, u, comment, self).image(&img_url))

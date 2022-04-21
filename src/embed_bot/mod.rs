@@ -148,6 +148,7 @@ impl EmbedBot {
         author: &User,
         url: Url,
         comment: Option<&str>,
+        ignore_nsfw: bool,
         settings: &Settings,
     ) -> Result<Option<Message>, Box<dyn std::error::Error>> {
         if let Some(api) = self.find_api(&url) {
@@ -159,7 +160,7 @@ impl EmbedBot {
 
             match api.get_post(url.clone()).await {
                 Ok(post) if post.should_embed(settings) => {
-                    let msg = post.send_embed(author, comment, chan, ctx).await?;
+                    let msg = post.send_embed(author, comment, ignore_nsfw, chan, ctx).await?;
 
                     println!("[Info] embedded '{}': {:?}", url, post);
                     Ok(Some(msg))
@@ -169,7 +170,10 @@ impl EmbedBot {
                     Ok(None)
                 }
                 Err(e) => {
-                    eprintln!("[Error] could not fetch post. Reason: {:?}", e);
+                    let msg = format!("could not fetch post. Reason: {:?}", e);
+                    Self::reply_error(chan, ctx, &msg).await?;
+
+                    eprintln!("[Error] {}", msg);
                     Ok(None)
                 }
             }
@@ -203,11 +207,28 @@ impl EventHandler for EmbedBot {
                         .map_err(|e| format!("```{}```", e));
 
                 match opts {
-                    Ok(EmbedBotOpts::Embed { url, comment }) => match Url::parse(&url) {
+                    Ok(EmbedBotOpts::Embed {
+                        url,
+                        comment,
+                        ignore_nsfw,
+                    }) => match Url::parse(&url) {
                         Ok(url) => {
-                            self.embed(&ctx, msg.channel_id, &msg.author, url, comment.as_deref(), settings)
+                            let reply = self
+                                .embed(
+                                    &ctx,
+                                    msg.channel_id,
+                                    &msg.author,
+                                    url,
+                                    comment.as_deref(),
+                                    ignore_nsfw,
+                                    settings,
+                                )
                                 .await
                                 .unwrap();
+
+                            if reply.is_some() {
+                                msg.delete(&ctx).await.unwrap();
+                            }
                         }
                         Err(_) => {
                             Self::reply_error(msg.channel_id, &ctx, &format!("could not parse url: {}", url))
@@ -290,7 +311,15 @@ impl EventHandler for EmbedBot {
 
                 if let Some(url) = url {
                     let reply = self
-                        .embed(&ctx, msg.channel_id, &msg.author, url, comment.as_deref(), settings)
+                        .embed(
+                            &ctx,
+                            msg.channel_id,
+                            &msg.author,
+                            url,
+                            comment.as_deref(),
+                            false,
+                            settings,
+                        )
                         .await
                         .unwrap();
 
