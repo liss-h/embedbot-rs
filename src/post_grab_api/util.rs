@@ -7,24 +7,28 @@ use std::{
 };
 use url::Url;
 
-pub async fn wget<U: IntoUrl>(url: U, user_agent: &str) -> Result<reqwest::Response, Error> {
+pub const USER_AGENT: &str = "embedbot v0.3";
+pub const EMBED_CONTENT_MAX_LEN: usize = 2048;
+pub const EMBED_TITLE_MAX_LEN: usize = 256;
+
+pub async fn wget<U: IntoUrl>(url: U) -> Result<reqwest::Response, Error> {
     let client = reqwest::Client::new();
     client
         .get(url)
-        .header("User-Agent", user_agent)
+        .header("User-Agent", USER_AGENT)
         .send()
         .await
         .map_err(Into::into)
 }
 
 #[cfg(feature = "scraper")]
-pub async fn wget_html<U: IntoUrl>(url: U, user_agent: &str) -> Result<scraper::Html, Error> {
-    let resp = wget(url, user_agent).await?;
+pub async fn wget_html<U: IntoUrl>(url: U) -> Result<scraper::Html, Error> {
+    let resp = wget(url).await?;
     Ok(scraper::Html::parse_document(&resp.text().await?))
 }
 
-pub async fn wget_json<U: IntoUrl>(url: U, user_agent: &str) -> Result<serde_json::Value, Error> {
-    wget(url, user_agent).await?.json().await.map_err(Into::into)
+pub async fn wget_json<U: IntoUrl>(url: U) -> Result<serde_json::Value, Error> {
+    wget(url).await?.json().await.map_err(Into::into)
 }
 
 pub fn url_path_ends_with<'a, P>(haystack: &'a Url, needle: P) -> bool
@@ -44,9 +48,6 @@ pub fn url_path_ends_with_image_extension(haystack: &Url) -> bool {
 
     EXTENSIONS.iter().any(|x| s.ends_with(x))
 }
-
-pub const EMBED_CONTENT_MAX_LEN: usize = 2048;
-pub const EMBED_TITLE_MAX_LEN: usize = 256;
 
 pub fn escape_markdown(title: &str) -> String {
     const REPLACEMENTS: [(&str, &str); 14] = [

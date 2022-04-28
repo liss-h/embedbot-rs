@@ -1,128 +1,47 @@
-pub mod interface;
+pub mod settings;
 
-use super::post_grab_api::PostScraper;
-use interface::{command_line_split, EmbedBotOpts, SettingsOptions, SettingsSubcommand};
-
-use clap::{ArgEnum, Parser};
-use serde::{Deserialize, Serialize};
+use crate::post_grab_api::{CreateResponse, DynPostScraper, EmbedOptions, Error, Post};
 use serenity::{
     async_trait,
     client::{Context, EventHandler},
-    model::{channel::Message, gateway::Ready, id::ChannelId, user::User},
+    model::{
+        channel::Message,
+        gateway::Ready,
+        interactions::{
+            application_command::{ApplicationCommandInteractionData, ApplicationCommandOptionType},
+            Interaction,
+        },
+        prelude::application_command::{
+            ApplicationCommand, ApplicationCommandInteractionDataOption, ApplicationCommandType,
+        },
+    },
     prelude::TypeMapKey,
 };
+use settings::RuntimeSettings;
 use std::{
-    collections::HashSet,
     fmt::Display,
     fs::File,
     path::{Path, PathBuf},
 };
 use url::Url;
 
-#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Hash, Debug)]
-pub enum PostType {
-    Text,
-    Gallery,
-    Image,
-    Video,
+pub struct SettingsKey;
+
+impl TypeMapKey for SettingsKey {
+    type Value = RuntimeSettings;
 }
 
-#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq, Hash, Debug)]
-pub enum Crossposted {
-    Crosspost,
-    NonCrosspost,
-    Any,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct RedditEmbedSet(pub HashSet<(PostType, Crossposted)>);
-
-#[derive(Serialize, Deserialize, Debug)]
-#[repr(transparent)]
-pub struct NineGagEmbedSet(pub HashSet<PostType>);
-
-#[derive(Serialize, Deserialize, Debug)]
-#[repr(transparent)]
-pub struct DefaultTrueBool(pub bool);
-
-impl Default for RedditEmbedSet {
-    fn default() -> Self {
-        RedditEmbedSet(
-            [
-                (PostType::Text, Crossposted::Any),
-                (PostType::Gallery, Crossposted::Any),
-                (PostType::Image, Crossposted::Any),
-                (PostType::Video, Crossposted::Crosspost),
-            ]
-            .into_iter()
-            .collect(),
-        )
-    }
-}
-
-impl Default for NineGagEmbedSet {
-    fn default() -> Self {
-        NineGagEmbedSet([PostType::Video].into_iter().collect())
-    }
-}
-
-impl Default for DefaultTrueBool {
-    fn default() -> Self {
-        DefaultTrueBool(true)
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Default)]
-pub struct EmbedSettings {
-    #[serde(default)]
-    pub reddit: RedditEmbedSet,
-
-    #[serde(default)]
-    pub ninegag: NineGagEmbedSet,
-
-    #[serde(default)]
-    pub imgur: DefaultTrueBool,
-
-    #[serde(default)]
-    pub svg: DefaultTrueBool,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Settings {
-    pub prefix: String,
-    pub do_implicit_auto_embed: bool,
-
-    #[serde(default)]
-    pub embed_settings: EmbedSettings,
-}
-
-impl Settings {
-    pub fn display_value(&self, opt: &SettingsOptions) -> &dyn Display {
-        match opt {
-            SettingsOptions::Prefix => &self.prefix,
-            SettingsOptions::DoImplicitAutoEmbed => &self.do_implicit_auto_embed,
-        }
-    }
-}
-
-impl TypeMapKey for Settings {
-    type Value = Settings;
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        Settings {
-            prefix: "~".to_string(),
-            do_implicit_auto_embed: true,
-            embed_settings: EmbedSettings::default(),
-        }
+pub fn display_settings_value<'v>(settings: &'v RuntimeSettings, opt: &str) -> &'v dyn Display {
+    match opt {
+        "do-implicit-auto-embed" => &settings.do_implicit_auto_embed,
+        _ => panic!("invalid settings key"),
     }
 }
 
 #[derive(Default)]
 pub struct EmbedBot {
     settings_path: PathBuf,
-    apis: Vec<Box<dyn PostScraper + Send + Sync>>,
+    apis: Vec<Box<dyn DynPostScraper + Send + Sync>>,
 }
 
 impl EmbedBot {
@@ -133,64 +52,25 @@ impl EmbedBot {
         }
     }
 
-    pub fn find_api(&self, url: &Url) -> Option<&(dyn PostScraper + Send + Sync)> {
+    pub fn find_api(&self, url: &Url) -> Option<&(dyn DynPostScraper + Send + Sync)> {
         self.apis.iter().find(|a| a.is_suitable(url)).map(AsRef::as_ref)
     }
 
-    pub fn register_api<T: 'static + PostScraper + Send + Sync>(&mut self, api: T) {
+    pub fn register_api<T: 'static + DynPostScraper + Send + Sync>(&mut self, api: T) {
         self.apis.push(Box::new(api));
     }
 
-    async fn embed(
-        &self,
-        ctx: &Context,
-        chan: ChannelId,
-        author: &User,
-        url: Url,
-        comment: Option<&str>,
-        ignore_nsfw: bool,
-        settings: &Settings,
-    ) -> Result<Option<Message>, Box<dyn std::error::Error>> {
+    async fn get_post(&self, mut url: Url) -> Result<Box<dyn Post>, Error> {
         if let Some(api) = self.find_api(&url) {
-            let url = {
-                let mut u = url.clone();
-                u.set_fragment(None);
-                u
-            };
-
-            match api.get_post(url.clone()).await {
-                Ok(post) if post.should_embed(settings) => {
-                    let msg = post.send_embed(author, comment, ignore_nsfw, chan, ctx).await?;
-
-                    println!("[Info] embedded '{}': {:?}", url, post);
-                    Ok(Some(msg))
-                }
-                Ok(_) => {
-                    println!("[Info] ignoring '{}'. Reason: not supposed to embed", url);
-                    Ok(None)
-                }
-                Err(e) => {
-                    let msg = format!("could not fetch post. Reason: {:?}", e);
-                    Self::reply_error(chan, ctx, &msg).await?;
-
-                    eprintln!("[Error] {}", msg);
-                    Ok(None)
-                }
-            }
+            url.set_fragment(None);
+            api.get_dyn_post(url).await
         } else {
-            println!("[Info] ignoring '{}'. Reason: no api available", url);
-            Ok(None)
+            Err(Error::NoApiAvailable)
         }
     }
 
-    async fn reply_success(chan: ChannelId, ctx: &Context, msg: &str) -> serenity::Result<Message> {
-        chan.send_message(ctx, |m| m.content(format!(":white_check_mark: Success\n{}", msg)))
-            .await
-    }
-
-    async fn reply_error(chan: ChannelId, ctx: &Context, msg: &str) -> serenity::Result<Message> {
-        chan.send_message(ctx, |m| m.content(format!(":x: Error\n{}", msg)))
-            .await
+    fn reply_error(msg: &str, response: CreateResponse) {
+        response.embed(|e| e.title(":x: Error").description(msg));
     }
 }
 
@@ -198,97 +78,15 @@ impl EmbedBot {
 impl EventHandler for EmbedBot {
     async fn message(&self, ctx: Context, msg: Message) {
         if !msg.author.bot {
-            let mut data = ctx.data.write().await;
-            let mut settings = data.get_mut::<Settings>().unwrap();
+            let do_implicit_auto_embed = ctx
+                .data
+                .read()
+                .await
+                .get::<SettingsKey>()
+                .unwrap()
+                .do_implicit_auto_embed;
 
-            if msg.content.starts_with(&settings.prefix) {
-                let opts =
-                    EmbedBotOpts::try_parse_from(command_line_split(msg.content.trim_start_matches(&settings.prefix)))
-                        .map_err(|e| format!("```{}```", e));
-
-                match opts {
-                    Ok(EmbedBotOpts::Embed {
-                        url,
-                        comment,
-                        ignore_nsfw,
-                    }) => match Url::parse(&url) {
-                        Ok(url) => {
-                            let reply = self
-                                .embed(
-                                    &ctx,
-                                    msg.channel_id,
-                                    &msg.author,
-                                    url,
-                                    comment.as_deref(),
-                                    ignore_nsfw,
-                                    settings,
-                                )
-                                .await
-                                .unwrap();
-
-                            if reply.is_some() {
-                                msg.delete(&ctx).await.unwrap();
-                            }
-                        }
-                        Err(_) => {
-                            Self::reply_error(msg.channel_id, &ctx, &format!("could not parse url: {}", url))
-                                .await
-                                .unwrap();
-                        }
-                    },
-                    Ok(EmbedBotOpts::Settings(SettingsSubcommand::Get { key })) => {
-                        Self::reply_success(
-                            msg.channel_id,
-                            &ctx,
-                            &format!(
-                                "```c\n{key} == {value}\n```",
-                                key = key.to_possible_value().unwrap().get_name(),
-                                value = settings.display_value(&key)
-                            ),
-                        )
-                        .await
-                        .unwrap();
-                    }
-                    Ok(EmbedBotOpts::Settings(SettingsSubcommand::Set { key, value })) => {
-                        let res = match key {
-                            SettingsOptions::Prefix => {
-                                settings.prefix = value.clone();
-                                Ok(())
-                            }
-                            SettingsOptions::DoImplicitAutoEmbed => {
-                                if let Ok(value) = value.parse::<bool>() {
-                                    settings.do_implicit_auto_embed = value;
-                                    Ok(())
-                                } else {
-                                    Err("expected boolean".to_owned())
-                                }
-                            }
-                        };
-
-                        match res {
-                            Ok(()) => {
-                                let m = format!(
-                                    "```c\n{key} := {value}\n```",
-                                    key = key.to_possible_value().unwrap().get_name(),
-                                    value = value
-                                );
-
-                                Self::reply_success(msg.channel_id, &ctx, &m).await.unwrap();
-
-                                if let Ok(f) = File::create(&self.settings_path) {
-                                    serde_json::to_writer(f, &settings).unwrap();
-                                }
-                            }
-                            Err(e) => {
-                                Self::reply_error(msg.channel_id, &ctx, &e).await.unwrap();
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        Self::reply_error(msg.channel_id, &ctx, &e).await.unwrap();
-                    }
-                }
-            } else if settings.do_implicit_auto_embed {
+            if do_implicit_auto_embed {
                 let content: Vec<_> = msg.content.lines().collect();
 
                 let (url, comment) = match &content[..] {
@@ -301,7 +99,6 @@ impl EventHandler for EmbedBot {
                             .partition(|a| Url::parse(a).is_ok());
 
                         let mut urls = urls.into_iter().map(|u| Url::parse(u).unwrap());
-                        // think about this: .filter(|u| self.find_api(u).is_some());
 
                         let comments = comments.into_iter().intersperse("\n").collect::<String>();
 
@@ -310,28 +107,297 @@ impl EventHandler for EmbedBot {
                 };
 
                 if let Some(url) = url {
-                    let reply = self
-                        .embed(
-                            &ctx,
-                            msg.channel_id,
-                            &msg.author,
-                            url,
-                            comment.as_deref(),
-                            false,
-                            settings,
-                        )
-                        .await
-                        .unwrap();
+                    match self.get_post(url.clone()).await {
+                        Ok(post) => {
+                            msg.channel_id
+                                .send_message(&ctx, |response| {
+                                    post.create_embed(
+                                        &msg.author,
+                                        &EmbedOptions {
+                                            comment,
+                                            ignore_nsfw: false,
+                                        },
+                                        CreateResponse::Message(response),
+                                    );
+                                    response
+                                })
+                                .await
+                                .unwrap();
 
-                    if reply.is_some() {
-                        msg.delete(&ctx).await.unwrap();
+                            msg.delete(&ctx).await.unwrap();
+                        }
+                        Err(Error::NoApiAvailable) => {
+                            println!("[Info] not embedding {}: no api available", url);
+                        }
+                        Err(Error::NotSupposedToEmbed(_)) => {
+                            println!("[Info] ignoring {}: not supposed to embed", url);
+                        }
+                        Err(e) => {
+                            eprintln!("[Error] {}", e);
+
+                            msg.channel_id
+                                .send_message(&ctx, |response| {
+                                    Self::reply_error(&format!("{}", e), CreateResponse::Message(response));
+                                    response
+                                })
+                                .await
+                                .unwrap();
+                        }
                     }
                 }
             }
         }
     }
 
-    async fn ready(&self, _ctx: Context, _ready: Ready) {
+    async fn ready(&self, ctx: Context, _ready: Ready) {
+        ApplicationCommand::create_global_application_command(&ctx, |command| {
+            command
+                .name("embed")
+                .kind(ApplicationCommandType::ChatInput)
+                .description("embed a post")
+                .create_option(|option| {
+                    option
+                        .name("url")
+                        .description("url of the post")
+                        .required(true)
+                        .kind(ApplicationCommandOptionType::String)
+                })
+                .create_option(|option| {
+                    option
+                        .name("ignore-nsfw")
+                        .description("embed fully even if post is flagged as nsfw")
+                        .required(false)
+                        .kind(ApplicationCommandOptionType::Boolean)
+                })
+                .create_option(|option| {
+                    option
+                        .name("comment")
+                        .description("a personal comment to include")
+                        .required(false)
+                        .kind(ApplicationCommandOptionType::String)
+                })
+        })
+        .await
+        .unwrap();
+
+        ApplicationCommand::create_global_application_command(&ctx, |command| {
+            command
+                .name("settings")
+                .description("view or modify bot settings")
+                .kind(ApplicationCommandType::ChatInput)
+                .create_option(|option| {
+                    option
+                        .name("get")
+                        .description("view a bot setting")
+                        .kind(ApplicationCommandOptionType::SubCommandGroup)
+                        .create_sub_option(|option| {
+                            option
+                                .name("do-implicit-auto-embed")
+                                .description("try to embed urls even when not explicitly called")
+                                .kind(ApplicationCommandOptionType::SubCommand)
+                        })
+                        .create_sub_option(|option| {
+                            option
+                                .name("all")
+                                .description("all settings")
+                                .kind(ApplicationCommandOptionType::SubCommand)
+                        })
+                })
+                .create_option(|option| {
+                    option
+                        .name("set")
+                        .description("change a bot setting")
+                        .kind(ApplicationCommandOptionType::SubCommandGroup)
+                        .create_sub_option(|option| {
+                            option
+                                .name("do-implicit-auto-embed")
+                                .description("try to embed urls even when not explicitly called")
+                                .kind(ApplicationCommandOptionType::SubCommand)
+                                .create_sub_option(|option| {
+                                    option
+                                        .name("value")
+                                        .description("the new value")
+                                        .required(true)
+                                        .kind(ApplicationCommandOptionType::Boolean)
+                                })
+                        })
+                })
+        })
+        .await
+        .unwrap();
+
         println!("[Info] logged in");
+    }
+
+    async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
+        if let Interaction::ApplicationCommand(command) = &interaction {
+            match &command.data {
+                ApplicationCommandInteractionData { name, options, .. } if name == "embed" => {
+                    let url = options
+                        .iter()
+                        .find(|c| c.name == "url")
+                        .unwrap()
+                        .value
+                        .as_ref()
+                        .unwrap()
+                        .as_str()
+                        .unwrap();
+
+                    let comment = options
+                        .iter()
+                        .find(|c| c.name == "comment")
+                        .and_then(|c| c.value.as_ref())
+                        .map(|c| c.as_str().unwrap().to_owned());
+
+                    let ignore_nsfw = options
+                        .iter()
+                        .find(|c| c.name == "ignore-nsfw")
+                        .and_then(|c| c.value.as_ref())
+                        .map(|c| c.as_bool().unwrap())
+                        .unwrap_or(false);
+
+                    let opts = EmbedOptions { comment, ignore_nsfw };
+
+                    match Url::parse(url) {
+                        Ok(url) => {
+                            let user = &command.user;
+
+                            match self.get_post(url.clone()).await {
+                                Ok(post) => {
+                                    command
+                                        .create_interaction_response(&ctx, |resp| {
+                                            resp.interaction_response_data(|data| {
+                                                post.create_embed(user, &opts, CreateResponse::Interaction(data));
+                                                data
+                                            })
+                                        })
+                                        .await
+                                        .unwrap();
+
+                                    println!("[Info] embedded '{}': {:?}", url, post);
+                                }
+                                Err(e) => {
+                                    let msg = format!("{}", e);
+                                    eprintln!("[Error] {msg}");
+
+                                    command
+                                        .create_interaction_response(&ctx, |resp| {
+                                            resp.interaction_response_data(|data| {
+                                                Self::reply_error(&msg, CreateResponse::Interaction(data));
+                                                data
+                                            })
+                                        })
+                                        .await
+                                        .unwrap();
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            command
+                                .create_interaction_response(&ctx, |resp| {
+                                    resp.interaction_response_data(|data| {
+                                        Self::reply_error(
+                                            &format!("Could not parse url: {}", url),
+                                            CreateResponse::Interaction(data),
+                                        );
+                                        data
+                                    })
+                                })
+                                .await
+                                .unwrap();
+                        }
+                    }
+                }
+                ApplicationCommandInteractionData { name, options, .. } if name == "settings" => {
+                    match options.first().unwrap() {
+                        ApplicationCommandInteractionDataOption { name, options, .. } if name == "get" => {
+                            let key = &options.first().unwrap().name;
+
+                            let data = ctx.data.read().await;
+                            let settings = data.get::<SettingsKey>().unwrap();
+
+                            if key == "all" {
+                                command
+                                    .create_interaction_response(&ctx, |response| {
+                                        response.interaction_response_data(|data| {
+                                            data.embed(|e| {
+                                                e.title(":ballot_box_with_check: Current setting values").field(
+                                                    "do-implicit-auto-embed",
+                                                    settings.do_implicit_auto_embed,
+                                                    true,
+                                                )
+                                            })
+                                        })
+                                    })
+                                    .await
+                                    .unwrap();
+                            } else {
+                                command
+                                    .create_interaction_response(&ctx, |response| {
+                                        response.interaction_response_data(|data| {
+                                            data.embed(|e| {
+                                                e.title(":ballot_box_with_check: Current setting value").field(
+                                                    key,
+                                                    display_settings_value(settings, key),
+                                                    true,
+                                                )
+                                            })
+                                        })
+                                    })
+                                    .await
+                                    .unwrap();
+                            }
+                        }
+                        ApplicationCommandInteractionDataOption { name, options, .. } if name == "set" => {
+                            let key_opt = &options.first().unwrap();
+
+                            let key = &key_opt.name;
+
+                            let mut data = ctx.data.write().await;
+                            let settings = data.get_mut::<SettingsKey>().unwrap();
+
+                            let value = &key_opt
+                                .options
+                                .iter()
+                                .find(|c| c.name == "value")
+                                .unwrap()
+                                .value
+                                .as_ref()
+                                .unwrap();
+
+                            match key.as_str() {
+                                "do-implicit-auto-embed" => {
+                                    settings.do_implicit_auto_embed = value.as_bool().unwrap();
+                                }
+                                _ => panic!("invalid setting"),
+                            }
+
+                            match File::create(&self.settings_path) {
+                                Ok(f) => {
+                                    serde_json::to_writer_pretty(f, settings).unwrap();
+                                }
+                                Err(e) => {
+                                    eprintln!("[Error] unable to persist runtime settings: {}", e);
+                                }
+                            }
+
+                            command
+                                .create_interaction_response(&ctx, |response| {
+                                    response.interaction_response_data(|data| {
+                                        data.embed(|e| {
+                                            e.title(":ballot_box_with_check: Changed setting value")
+                                                .field(key, value, true)
+                                        })
+                                    })
+                                })
+                                .await
+                                .unwrap();
+                        }
+                        _ => panic!("invalid settings subcommand"),
+                    }
+                }
+                _ => (),
+            }
+        }
     }
 }

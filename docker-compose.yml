@@ -3,6 +3,5 @@ services:
     embed_bot:
         build: .
         volumes:
-            - ./embedbot.conf.default:/etc/embedbot.conf
-        environment:
-            - DISCORD_TOKEN=
+            - ./config/init.json:/etc/embedbot/init.json:ro
+            - ./config/runtime.json:/etc/embedbot/runtime.json

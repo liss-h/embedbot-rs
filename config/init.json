@@ -1,0 +1,28 @@
+{
+    "discord_token": "YOUR DISCORD BOT TOKEN",
+    "modules": {
+        "reddit": {
+            "embed_set": [
+                [
+                    "Image",
+                    "Any"
+                ],
+                [
+                    "Gallery",
+                    "Any"
+                ],
+                [
+                    "Text",
+                    "Any"
+                ]
+            ]
+        },
+        "ninegag": {
+            "embed_set": [
+                "Image"
+            ]
+        },
+        "imgur": {},
+        "svg": {}
+    }
+}

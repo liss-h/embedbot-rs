@@ -2,29 +2,23 @@
 
 use super::{
     escape_markdown, include_author_comment, limit_descr_len, limit_len, url_path_ends_with,
-    url_path_ends_with_image_extension, wget_json, Error, Post, PostScraper, Settings, EMBED_TITLE_MAX_LEN, USER_AGENT,
+    url_path_ends_with_image_extension, wget_json, CreateResponse, EmbedOptions, Error, Post as PostTrait, PostScraper,
+    EMBED_TITLE_MAX_LEN,
 };
-use crate::{
-    embed_bot::{Crossposted, PostType},
-    nav_json,
-};
+use json_nav::json_nav;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use serenity::{
-    async_trait,
-    builder::CreateEmbed,
-    client::Context,
-    model::{channel::Message, id::ChannelId, user::User},
-};
-use std::convert::TryInto;
+use serenity::{async_trait, builder::CreateEmbed, model::user::User};
+use std::{collections::HashSet, convert::TryInto};
 use url::Url;
 
-fn fmt_title(p: &RedditPostCommonData) -> String {
+fn fmt_title(p: &PostCommonData) -> String {
     let flair = (!p.flair.is_empty())
         .then(|| format!("[{}] ", p.flair))
         .unwrap_or_default();
 
     match &p.subreddit {
-        RedditPostOrigin::Crossposted { from, to } => {
+        PostOrigin::Crossposted { from, to } => {
             let em = escape_markdown(&p.title);
             let title = limit_len(&em, EMBED_TITLE_MAX_LEN - 34 - 18 - to.len() - flair.len() - from.len()); // -34-18 for formatting
 
@@ -36,7 +30,7 @@ fn fmt_title(p: &RedditPostCommonData) -> String {
                 from = from,
             )
         }
-        RedditPostOrigin::JustSubreddit(subreddit) => {
+        PostOrigin::JustSubreddit(subreddit) => {
             let em = escape_markdown(&p.title);
             let title = limit_len(&em, EMBED_TITLE_MAX_LEN - 34 - subreddit.len() - flair.len()); // -34 for formatting
 
@@ -50,7 +44,7 @@ fn fmt_title(p: &RedditPostCommonData) -> String {
     }
 }
 
-fn base_embed<'a>(e: &'a mut CreateEmbed, u: &User, comment: Option<&str>, post: &RedditPost) -> &'a mut CreateEmbed {
+fn base_embed<'a>(e: &'a mut CreateEmbed, u: &User, comment: Option<&str>, post: &Post) -> &'a mut CreateEmbed {
     e.title(&fmt_title(&post.common))
         .description(limit_descr_len(&escape_markdown(&post.common.text)))
         .author(|a| a.name(&u.name))
@@ -67,7 +61,7 @@ fn base_embed<'a>(e: &'a mut CreateEmbed, u: &User, comment: Option<&str>, post:
     e
 }
 
-fn include_comment<'a>(e: &'a mut CreateEmbed, comment: &RedditComment) -> &'a mut CreateEmbed {
+fn include_comment<'a>(e: &'a mut CreateEmbed, comment: &Comment) -> &'a mut CreateEmbed {
     let name = format!("Comment by Reddit User '{author}'", author = comment.author);
     e.field(name, escape_markdown(&comment.body), true)
 }
@@ -84,37 +78,37 @@ fn unescape_html(html: &str) -> String {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RedditPostOrigin {
+pub enum PostOrigin {
     JustSubreddit(String),
     Crossposted { from: String, to: String },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RedditComment {
+pub struct Comment {
     author: String,
     body: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RedditPostShowMode {
+pub enum PostShowMode {
     Default,
     Nsfw,
     Spoiler,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RedditPostCommonData {
+pub struct PostCommonData {
     src: Url,
-    subreddit: RedditPostOrigin,
+    subreddit: PostOrigin,
     title: String,
     text: String,
     flair: String,
-    show_mode: RedditPostShowMode,
-    comment: Option<RedditComment>,
+    show_mode: PostShowMode,
+    comment: Option<Comment>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum RedditPostSpecializedData {
+pub enum PostSpecializedData {
     Text,
     Gallery { img_urls: Vec<Url> },
     Image { img_url: Url },
@@ -122,17 +116,12 @@ pub enum RedditPostSpecializedData {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RedditPost {
-    common: RedditPostCommonData,
-    specialized: RedditPostSpecializedData,
+pub struct Post {
+    common: PostCommonData,
+    specialized: PostSpecializedData,
 }
 
-fn manual_embed(
-    author: &str,
-    post: &RedditPostCommonData,
-    embed_urls: &[Url],
-    discord_comment: Option<&str>,
-) -> String {
+fn manual_embed(author: &str, post: &PostCommonData, embed_urls: &[Url], discord_comment: Option<&str>) -> String {
     let discord_comment = discord_comment
         .map(|c| format!("**Comment By {author}:**\n{comment}\n\n", author = author, comment = c))
         .unwrap_or_default();
@@ -163,55 +152,31 @@ fn manual_embed(
     )
 }
 
-#[async_trait]
-impl Post for RedditPost {
-    fn should_embed(&self, settings: &Settings) -> bool {
-        let ptype = match &self.specialized {
-            RedditPostSpecializedData::Text => PostType::Text,
-            RedditPostSpecializedData::Gallery { .. } => PostType::Gallery,
-            RedditPostSpecializedData::Image { .. } => PostType::Image,
-            RedditPostSpecializedData::Video { .. } => PostType::Video,
-        };
-
-        let porig = match &self.common.subreddit {
-            RedditPostOrigin::JustSubreddit(_) => Crossposted::NonCrosspost,
-            RedditPostOrigin::Crossposted { .. } => Crossposted::Crosspost,
-        };
-
-        let s = &settings.embed_settings.reddit.0;
-
-        s.contains(&(ptype, Crossposted::Any)) || s.contains(&(ptype, porig))
-    }
-
-    async fn send_embed(
-        &self,
-        u: &User,
-        comment: Option<&str>,
-        ignore_nsfw: bool,
-        chan: ChannelId,
-        ctx: &Context,
-    ) -> Result<Message, Box<dyn std::error::Error>> {
-        let msg = chan
-            .send_message(ctx, |m| match self.common.show_mode {
-                RedditPostShowMode::Nsfw if !ignore_nsfw => m.embed(|e| {
+impl PostTrait for Post {
+    fn create_embed<'data>(&'data self, u: &User, opts: &EmbedOptions, response: CreateResponse<'_, 'data>) {
+        match self.common.show_mode {
+            PostShowMode::Nsfw if !opts.ignore_nsfw => {
+                response.embed(|e| {
                     e.title(fmt_title(&self.common))
                         .description("Warning NSFW: Click to view content")
                         .author(|a| a.name(&u.name))
                         .url(&self.common.src);
 
-                    if let Some(comment) = comment {
+                    if let Some(comment) = &opts.comment {
                         include_author_comment(e, u, comment);
                     }
 
                     e
-                }),
-                RedditPostShowMode::Spoiler => m.embed(|e| {
+                });
+            }
+            PostShowMode::Spoiler => {
+                response.embed(|e| {
                     e.title(fmt_title(&self.common))
                         .description("Spoiler: Click to view content")
                         .author(|a| a.name(&u.name))
                         .url(&self.common.src);
 
-                    if let Some(comment) = comment {
+                    if let Some(comment) = &opts.comment {
                         include_author_comment(e, u, comment);
                     }
 
@@ -220,92 +185,117 @@ impl Post for RedditPost {
                     }
 
                     e
-                }),
+                });
+            }
 
-                _ => match &self.specialized {
-                    RedditPostSpecializedData::Text => m.embed(|e| base_embed(e, u, comment, self)),
-                    RedditPostSpecializedData::Image { img_url } => {
-                        m.embed(|e| base_embed(e, u, comment, self).image(&img_url))
-                    }
-                    RedditPostSpecializedData::Gallery { img_urls } => {
-                        m.content(manual_embed(&u.name, &self.common, img_urls, comment))
-                    }
-                    RedditPostSpecializedData::Video { video_url } => {
-                        m.content(manual_embed(&u.name, &self.common, &[video_url.clone()], comment))
-                    }
-                },
-            })
-            .await?;
-
-        Ok(msg)
+            _ => match &self.specialized {
+                PostSpecializedData::Text => {
+                    response.embed(|e| base_embed(e, u, opts.comment.as_deref(), self));
+                }
+                PostSpecializedData::Image { img_url } => {
+                    response.embed(|e| base_embed(e, u, opts.comment.as_deref(), self).image(&img_url));
+                }
+                PostSpecializedData::Gallery { img_urls } => {
+                    response.content(manual_embed(&u.name, &self.common, img_urls, opts.comment.as_deref()));
+                }
+                PostSpecializedData::Video { video_url } => {
+                    response.content(manual_embed(
+                        &u.name,
+                        &self.common,
+                        &[video_url.clone()],
+                        opts.comment.as_deref(),
+                    ));
+                }
+            },
+        }
     }
 }
 
-#[derive(Default)]
-pub struct RedditAPI;
+#[derive(Serialize, Deserialize, Eq, PartialEq, Hash, Copy, Clone, Debug)]
+pub enum SettingsPostType {
+    Text,
+    Image,
+    Gallery,
+    Video,
+    Any,
+}
 
-impl RedditAPI {
-    fn analyze_post(url: Url, json: &Value) -> Result<RedditPost, Error> {
-        let top_level_post = nav_json! {
+#[derive(Serialize, Deserialize, Eq, PartialEq, Hash, Debug)]
+pub enum SettingsCrosspostType {
+    Crossposted,
+    NonCrossposted,
+    Any,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ApiSettings {
+    pub embed_set: HashSet<(SettingsPostType, SettingsCrosspostType)>,
+}
+
+pub struct Api {
+    pub settings: ApiSettings,
+}
+
+impl Api {
+    fn analyze_post(url: Url, json: &Value) -> Result<Post, Error> {
+        let top_level_post = json_nav! {
             json => 0 => "data" => "children" => 0 => "data";
             as object
         }?;
 
-        let title = nav_json! { top_level_post => "title"; as str }?.to_string();
+        let title = json_nav! { top_level_post => "title"; as str }?.to_string();
 
-        let subreddit = nav_json! { top_level_post => "subreddit"; as str }?.to_string();
+        let subreddit = json_nav! { top_level_post => "subreddit"; as str }?.to_string();
 
         // post_json is either top_level_post or the original post (in case of crosspost)
-        let (is_xpost, post_json) = nav_json! { top_level_post => "crosspost_parent_list" => 0; as object }
+        let (is_xpost, post_json) = json_nav! { top_level_post => "crosspost_parent_list" => 0; as object }
             .map(|parent| (true, parent))
             .unwrap_or((false, top_level_post));
 
-        let original_subreddit = nav_json! { post_json => "subreddit"; as str }?.to_string();
+        let original_subreddit = json_nav! { post_json => "subreddit"; as str }?.to_string();
 
-        let text = unescape_html(nav_json! { post_json => "selftext"; as str }?);
+        let text = unescape_html(json_nav! { post_json => "selftext"; as str }?);
 
-        let flair = nav_json! { post_json => "link_flair_text"; as str }
+        let flair = json_nav! { post_json => "link_flair_text"; as str }
             .map(ToString::to_string)
             .unwrap_or_default();
 
-        let nsfw = nav_json! { post_json => "over_18"; as bool }.unwrap_or_default();
+        let nsfw = json_nav! { post_json => "over_18"; as bool }.unwrap_or_default();
 
-        let spoiler = nav_json! { post_json => "spoiler"; as bool }.unwrap_or_default();
+        let spoiler = json_nav! { post_json => "spoiler"; as bool }.unwrap_or_default();
 
         let comment = {
-            let comment_json = nav_json! {
+            let comment_json = json_nav! {
                 json => 1 => "data" => "children" => 0 => "data"
             };
 
             match comment_json {
-                Ok(comment) if url_path_ends_with(&url, nav_json! { comment => "id"; as str }?) => {
-                    Some(RedditComment {
-                        author: nav_json! { comment => "author"; as str }?.to_owned(),
-                        body: unescape_html(nav_json! { comment => "body"; as str }?),
-                    })
-                }
+                Ok(comment) if url_path_ends_with(&url, json_nav! { comment => "id"; as str }?) => Some(Comment {
+                    author: json_nav! { comment => "author"; as str }?.to_owned(),
+                    body: unescape_html(json_nav! { comment => "body"; as str }?),
+                }),
                 _ => None,
             }
         };
 
-        let common_data = RedditPostCommonData {
+        let common_data = PostCommonData {
             src: url,
 
             subreddit: if is_xpost {
-                RedditPostOrigin::Crossposted {
+                PostOrigin::Crossposted {
                     from: original_subreddit,
                     to: subreddit,
                 }
             } else {
-                RedditPostOrigin::JustSubreddit(subreddit)
+                PostOrigin::JustSubreddit(subreddit)
             },
 
             show_mode: if nsfw {
-                RedditPostShowMode::Nsfw
+                PostShowMode::Nsfw
             } else if spoiler {
-                RedditPostShowMode::Spoiler
+                PostShowMode::Spoiler
             } else {
-                RedditPostShowMode::Default
+                PostShowMode::Default
             },
 
             title,
@@ -315,16 +305,17 @@ impl RedditAPI {
         };
 
         // embed_url can be "default" when the original post (referenced by crosspost) is deleted
-        let alt_embed_url =
-            nav_json! { top_level_post => "thumbnail"; as str }.and_then(|s| Url::parse(s).map_err(Into::into));
+        let alt_embed_url = json_nav! { top_level_post => "thumbnail"; as str }
+            .map_err(Error::from)
+            .and_then(|s| Url::parse(s).map_err(Error::from));
 
         let specialized_data = match post_json.get("secure_media") {
-            Some(Value::Object(sm)) if sm.contains_key("reddit_video") => RedditPostSpecializedData::Video {
-                video_url: nav_json! { sm => "reddit_video" => "fallback_url"; as str }?.try_into()?,
+            Some(Value::Object(sm)) if sm.contains_key("reddit_video") => PostSpecializedData::Video {
+                video_url: json_nav! { sm => "reddit_video" => "fallback_url"; as str }?.try_into()?,
             },
 
-            Some(Value::Object(sm)) if sm.contains_key("oembed") => RedditPostSpecializedData::Image {
-                img_url: nav_json! { sm => "oembed" => "thumbnail_url"; as str }?
+            Some(Value::Object(sm)) if sm.contains_key("oembed") => PostSpecializedData::Image {
+                img_url: json_nav! { sm => "oembed" => "thumbnail_url"; as str }?
                     .try_into()
                     .unwrap_or(alt_embed_url?),
             },
@@ -334,43 +325,42 @@ impl RedditAPI {
                     let mut urls = meta
                         .iter()
                         .map(|(_key, imgmeta)| {
-                            (nav_json! { imgmeta => "s" => "u"; as str })
+                            (json_nav! { imgmeta => "s" => "u"; as str })
                                 .map(unescape_url)
-                                .and_then(|u| Url::parse(&u).map_err(Into::into))
+                                .map_err(Error::from)
+                                .and_then(|u| Url::parse(&u).map_err(Error::from))
                         })
                         .collect::<Result<Vec<_>, _>>()
-                        .map_err(|_| Error::JsonConv("invalid url in gallery"))?;
+                        .map_err(|_| Error::JsonNav(json_nav::JsonNavError::TypeMismatch { expected: "url" }))?;
 
                     if urls.len() == 1 {
-                        RedditPostSpecializedData::Image {
+                        PostSpecializedData::Image {
                             img_url: urls.pop().unwrap(),
                         }
                     } else {
-                        RedditPostSpecializedData::Gallery { img_urls: urls }
+                        PostSpecializedData::Gallery { img_urls: urls }
                     }
                 } else {
-                    let url = Url::parse(nav_json! { post_json => "url"; as str }?).or(alt_embed_url);
+                    let url = Url::parse(json_nav! { post_json => "url"; as str }?).or(alt_embed_url);
 
                     match url {
                         Ok(url) if url_path_ends_with_image_extension(&url) => {
-                            RedditPostSpecializedData::Image { img_url: url }
+                            PostSpecializedData::Image { img_url: url }
                         }
-                        Ok(url) if url_path_ends_with(&url, ".gifv") => {
-                            RedditPostSpecializedData::Video { video_url: url }
-                        }
-                        _ => RedditPostSpecializedData::Text,
+                        Ok(url) if url_path_ends_with(&url, ".gifv") => PostSpecializedData::Video { video_url: url },
+                        _ => PostSpecializedData::Text,
                     }
                 }
             }
         };
 
-        Ok(RedditPost {
+        Ok(Post {
             common: common_data,
             specialized: specialized_data,
         })
     }
 
-    async fn scrape_post(&self, url: Url) -> Result<RedditPost, Error> {
+    async fn scrape_post(&self, url: Url) -> Result<Post, Error> {
         let (url, json) = {
             let mut u = url;
             u.set_query(None);
@@ -378,7 +368,7 @@ impl RedditAPI {
             let mut get_url = u.clone();
             get_url.set_path(&format!("{}.json", u.path()));
 
-            (u, wget_json(get_url, USER_AGENT).await?)
+            (u, wget_json(get_url).await?)
         };
 
         Self::analyze_post(url, &json)
@@ -386,13 +376,33 @@ impl RedditAPI {
 }
 
 #[async_trait]
-impl PostScraper for RedditAPI {
+impl PostScraper for Api {
+    type Output = Post;
+
     fn is_suitable(&self, url: &Url) -> bool {
         ["reddit.com", "www.reddit.com"].map(Some).contains(&url.domain())
     }
 
-    async fn get_post(&self, url: Url) -> Result<Box<dyn Post>, Error> {
-        Ok(Box::new(self.scrape_post(url).await?))
+    fn should_embed(&self, post: &Self::Output) -> bool {
+        let ptype = match &post.specialized {
+            PostSpecializedData::Text => SettingsPostType::Text,
+            PostSpecializedData::Gallery { .. } => SettingsPostType::Gallery,
+            PostSpecializedData::Image { .. } => SettingsPostType::Image,
+            PostSpecializedData::Video { .. } => SettingsPostType::Video,
+        };
+
+        let porig = match &post.common.subreddit {
+            PostOrigin::JustSubreddit(_) => SettingsCrosspostType::NonCrossposted,
+            PostOrigin::Crossposted { .. } => SettingsCrosspostType::Crossposted,
+        };
+
+        let s = &self.settings.embed_set;
+
+        s.contains(&(ptype, SettingsCrosspostType::Any)) || s.contains(&(ptype, porig))
+    }
+
+    async fn get_post(&self, url: Url) -> Result<Self::Output, Error> {
+        Ok(self.scrape_post(url).await?)
     }
 }
 
@@ -407,19 +417,19 @@ mod tests {
         let json: Value = serde_json::from_str(JSON).unwrap();
 
         let url = "https://www.reddit.com/r/Awwducational/comments/oi687m/a_very_rare_irrawaddy_dolphin_only_92_are/";
-        let post = RedditAPI::analyze_post(Url::from_str(url).unwrap(), &json).unwrap();
+        let post = Api::analyze_post(Url::from_str(url).unwrap(), &json).unwrap();
 
-        let expected = RedditPost {
-            common: RedditPostCommonData {
+        let expected = Post {
+            common: PostCommonData {
                 src: Url::from_str("https://www.reddit.com/r/Awwducational/comments/oi687m/a_very_rare_irrawaddy_dolphin_only_92_are/").unwrap(),
-                subreddit: RedditPostOrigin::JustSubreddit("Awwducational".to_owned()),
+                subreddit: PostOrigin::JustSubreddit("Awwducational".to_owned()),
                 title: "A very rare Irrawaddy Dolphin, only 92 are estimated to still exist. These dolphins have a bulging forehead, short beak, and 12-19 teeth on each side of both jaws.".to_owned(),
                 text: "".to_owned(),
                 flair: "Not yet verified".to_owned(),
-                show_mode: RedditPostShowMode::Default,
+                show_mode: PostShowMode::Default,
                 comment: None,
             },
-            specialized: RedditPostSpecializedData::Image {
+            specialized: PostSpecializedData::Image {
                 img_url: Url::from_str("https://i.redd.it/bsp1l1vynla71.jpg").unwrap(),
             },
         };
@@ -433,22 +443,22 @@ mod tests {
         let json: Value = serde_json::from_str(JSON).unwrap();
 
         let url = "https://www.reddit.com/r/aww/comments/oi6lfk/mama_cat_wants_her_kitten_to_be_friends_with/";
-        let post = RedditAPI::analyze_post(Url::from_str(url).unwrap(), &json).unwrap();
+        let post = Api::analyze_post(Url::from_str(url).unwrap(), &json).unwrap();
 
-        let expected = RedditPost {
-            common: RedditPostCommonData {
+        let expected = Post {
+            common: PostCommonData {
                 src: Url::from_str(
                     "https://www.reddit.com/r/aww/comments/oi6lfk/mama_cat_wants_her_kitten_to_be_friends_with/",
                 )
                 .unwrap(),
-                subreddit: RedditPostOrigin::JustSubreddit("aww".to_owned()),
+                subreddit: PostOrigin::JustSubreddit("aww".to_owned()),
                 title: "Mama cat wants her kitten to be friends with human baby.".to_owned(),
                 text: "".to_owned(),
                 flair: "".to_owned(),
-                show_mode: RedditPostShowMode::Default,
+                show_mode: PostShowMode::Default,
                 comment: None,
             },
-            specialized: RedditPostSpecializedData::Video {
+            specialized: PostSpecializedData::Video {
                 video_url: Url::from_str("https://v.redd.it/jx4ua6lirla71/DASH_1080.mp4?source=fallback").unwrap(),
             },
         };
@@ -463,19 +473,19 @@ mod tests {
 
         let url =
             "https://www.reddit.com/r/watercooling/comments/ohvv5w/lian_li_o11d_xl_with_2x_3090_sli_triple_radiator/";
-        let post = RedditAPI::analyze_post(Url::from_str(url).unwrap(), &json).unwrap();
+        let post = Api::analyze_post(Url::from_str(url).unwrap(), &json).unwrap();
 
-        let expected = RedditPost {
-            common: RedditPostCommonData {
+        let expected = Post {
+            common: PostCommonData {
                 src: Url::from_str("https://www.reddit.com/r/watercooling/comments/ohvv5w/lian_li_o11d_xl_with_2x_3090_sli_triple_radiator/").unwrap(),
-                subreddit: RedditPostOrigin::JustSubreddit("watercooling".to_owned()),
+                subreddit: PostOrigin::JustSubreddit("watercooling".to_owned()),
                 title: "Lian li o11D XL with 2x 3090 SLI triple radiator. done for now will upgrade the motherboard and cpu to threadripper in future. this case is solid!".to_owned(),
                 text: "".to_owned(),
                 flair: "Build Complete".to_owned(),
-                show_mode: RedditPostShowMode::Default,
+                show_mode: PostShowMode::Default,
                 comment: None,
             },
-            specialized: RedditPostSpecializedData::Gallery {
+            specialized: PostSpecializedData::Gallery {
                 img_urls: vec![
                     Url::from_str("https://preview.redd.it/nuwtn1ytsha71.jpg?width=3876&format=pjpg&auto=webp&s=7743bf4c3dbdff8e34c5a0a33d5171e4b485e1e5").unwrap(),
                     Url::from_str("https://preview.redd.it/wrro81ytsha71.jpg?width=4000&format=pjpg&auto=webp&s=5f1a86f3783d7ae290f733083b2af4397332c1be").unwrap(),
