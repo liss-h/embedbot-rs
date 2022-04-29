@@ -40,42 +40,37 @@ async fn main() {
 
         if let Some(modules) = init_settings.modules {
             #[cfg(feature = "reddit")]
-            {
-                if let Some(settings) = modules.reddit {
-                    e.register_api(post_grab_api::reddit::Api { settings });
-                }
+            if let Some(settings) = modules.reddit {
+                e.register_api(post_grab_api::reddit::Api { settings });
             }
 
             #[cfg(feature = "ninegag")]
-            {
-                if let Some(settings) = modules.ninegag {
-                    e.register_api(post_grab_api::ninegag::Api { settings });
-                }
+            if let Some(settings) = modules.ninegag {
+                e.register_api(post_grab_api::ninegag::Api { settings });
             }
 
             #[cfg(feature = "imgur")]
-            {
-                if let Some(settings) = modules.imgur {
-                    e.register_api(post_grab_api::imgur::Api { settings });
-                }
+            if let Some(settings) = modules.imgur {
+                e.register_api(post_grab_api::imgur::Api { settings });
             }
 
             #[cfg(feature = "svg")]
-            {
-                if let Some(settings) = modules.svg {
-                    e.register_api(post_grab_api::svg::Api { settings });
-                }
+            if let Some(settings) = modules.svg {
+                e.register_api(post_grab_api::svg::Api { settings });
             }
         }
 
         e
     };
 
-    let mut client = Client::builder(&init_settings.discord_token, GatewayIntents::empty())
-        .event_handler(embed_bot)
-        .type_map_insert::<SettingsKey>(runtime_settings)
-        .await
-        .expect("could not create client");
+    let mut client = Client::builder(
+        &init_settings.discord_token,
+        GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT,
+    )
+    .event_handler(embed_bot)
+    .type_map_insert::<SettingsKey>(runtime_settings)
+    .await
+    .expect("could not create client");
 
     if let Err(e) = client.start().await {
         eprintln!("[Error] Client Err: {:?}", e);
