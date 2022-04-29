@@ -4,11 +4,11 @@ use super::{
     escape_markdown, limit_len, wget_html, CreateResponse, EmbedOptions, Error, Post as PostTrait, PostScraper,
     EMBED_TITLE_MAX_LEN,
 };
+use crate::post_grab_api::include_author_comment;
 use scraper::selector::Selector;
 use serde::{Deserialize, Serialize};
 use serenity::{async_trait, model::user::User};
 use url::Url;
-use crate::post_grab_api::include_author_comment;
 
 fn fmt_title(p: &Post) -> String {
     let em = escape_markdown(&p.title);

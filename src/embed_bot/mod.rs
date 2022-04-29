@@ -192,7 +192,6 @@ impl EventHandler for EmbedBot {
                         .description("change a bot setting")
                         .kind(ApplicationCommandOptionType::SubCommandGroup);
 
-
                     #[cfg(feature = "implicit-auto-embed")]
                     option.create_sub_option(|option| {
                         option

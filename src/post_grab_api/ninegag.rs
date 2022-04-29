@@ -4,12 +4,12 @@ use super::{
     escape_markdown, limit_len, wget_html, CreateResponse, EmbedOptions, Error, Post as PostTrait, PostScraper,
     EMBED_TITLE_MAX_LEN,
 };
+use crate::post_grab_api::include_author_comment;
 use json_nav::json_nav;
 use serde::{Deserialize, Serialize};
 use serenity::{async_trait, model::user::User};
 use std::collections::HashSet;
 use url::Url;
-use crate::post_grab_api::include_author_comment;
 
 fn fmt_title(p: &Post) -> String {
     let em = escape_markdown(&p.title);
@@ -37,9 +37,7 @@ impl PostTrait for Post {
         match self.post_type {
             NineGagPostType::Image => {
                 response.embed(|e| {
-                    e.title(&self.title)
-                        .url(&self.src)
-                        .image(&self.embed_url);
+                    e.title(&self.title).url(&self.src).image(&self.embed_url);
 
                     if let Some(comment) = &opts.comment {
                         include_author_comment(e, u, comment);

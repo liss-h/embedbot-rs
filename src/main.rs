@@ -73,14 +73,11 @@ async fn main() {
         e
     };
 
-    let mut client = Client::builder(
-        &init_settings.discord_token,
-        get_gateway_intents(),
-    )
-    .event_handler(embed_bot)
-    .type_map_insert::<SettingsKey>(runtime_settings)
-    .await
-    .expect("could not create client");
+    let mut client = Client::builder(&init_settings.discord_token, get_gateway_intents())
+        .event_handler(embed_bot)
+        .type_map_insert::<SettingsKey>(runtime_settings)
+        .await
+        .expect("could not create client");
 
     if let Err(e) = client.start().await {
         eprintln!("[Error] Client Err: {:?}", e);
