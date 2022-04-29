@@ -13,6 +13,16 @@ use std::fs::File;
 pub const INIT_SETTINGS_PATH: &str = "/etc/embedbot/init.json";
 pub const RUNTIME_SETTINGS_PATH: &str = "/etc/embedbot/runtime.json";
 
+#[cfg(feature = "implicit-auto-embed")]
+fn get_gateway_intents() -> GatewayIntents {
+    GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT
+}
+
+#[cfg(not(feature = "implicit-auto-embed"))]
+fn get_gateway_intents() -> GatewayIntents {
+    GatewayIntents::empty()
+}
+
 #[tokio::main]
 async fn main() {
     let init_settings = {
@@ -65,7 +75,7 @@ async fn main() {
 
     let mut client = Client::builder(
         &init_settings.discord_token,
-        GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT,
+        get_gateway_intents(),
     )
     .event_handler(embed_bot)
     .type_map_insert::<SettingsKey>(runtime_settings)

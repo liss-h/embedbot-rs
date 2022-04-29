@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RuntimeSettings {
+    #[cfg(feature = "implicit-auto-embed")]
     pub do_implicit_auto_embed: bool,
 }
 
@@ -30,6 +31,7 @@ pub struct Modules {
 impl Default for RuntimeSettings {
     fn default() -> Self {
         Self {
+            #[cfg(feature = "implicit-auto-embed")]
             do_implicit_auto_embed: true,
         }
     }

@@ -7,8 +7,9 @@ use std::{
 };
 use url::Url;
 
-pub const USER_AGENT: &str = "embedbot v0.3";
-pub const EMBED_CONTENT_MAX_LEN: usize = 2048;
+const USER_AGENT: &str = "embedbot v0.3";
+const EMBED_CONTENT_MAX_LEN: usize = 2048;
+
 pub const EMBED_TITLE_MAX_LEN: usize = 256;
 
 pub async fn wget<U: IntoUrl>(url: U) -> Result<reqwest::Response, Error> {

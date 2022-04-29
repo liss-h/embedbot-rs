@@ -8,6 +8,7 @@ use scraper::selector::Selector;
 use serde::{Deserialize, Serialize};
 use serenity::{async_trait, model::user::User};
 use url::Url;
+use crate::post_grab_api::include_author_comment;
 
 fn fmt_title(p: &Post) -> String {
     let em = escape_markdown(&p.title);
@@ -24,12 +25,18 @@ pub struct Post {
 }
 
 impl PostTrait for Post {
-    fn create_embed<'data>(&'data self, u: &User, _opts: &EmbedOptions, response: CreateResponse<'_, 'data>) {
+    fn create_embed<'data>(&'data self, u: &User, opts: &EmbedOptions, response: CreateResponse<'_, 'data>) {
         response.embed(|e| {
             e.title(&fmt_title(self))
                 .author(|a| a.name(&u.name))
                 .url(&self.src)
-                .image(&self.embed_url)
+                .image(&self.embed_url);
+
+            if let Some(comment) = &opts.comment {
+                include_author_comment(e, u, comment);
+            }
+
+            e
         });
     }
 }

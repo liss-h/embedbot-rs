@@ -26,7 +26,7 @@ pub enum Error {
     JsonParse(#[from] serde_json::Error),
 
     #[cfg(any(feature = "ninegag", feature = "reddit"))]
-    #[error("could not navigate to {0} in json")]
+    #[error("navigation error: {0}")]
     JsonNav(#[from] json_nav::JsonNavError),
 
     #[error("HTTP GET failed")]
@@ -51,6 +51,7 @@ pub struct EmbedOptions {
 }
 
 pub enum CreateResponse<'r, 'data> {
+    #[cfg(feature = "implicit-auto-embed")]
     Message(&'r mut CreateMessage<'data>),
     Interaction(&'r mut CreateInteractionResponseData<'data>),
 }
@@ -58,6 +59,7 @@ pub enum CreateResponse<'r, 'data> {
 impl<'a> CreateResponse<'_, 'a> {
     pub fn content<S: ToString>(self, s: S) -> Self {
         match self {
+            #[cfg(feature = "implicit-auto-embed")]
             CreateResponse::Message(response) => CreateResponse::Message(response.content(s)),
             CreateResponse::Interaction(response) => CreateResponse::Interaction(response.content(s)),
         }
@@ -68,6 +70,7 @@ impl<'a> CreateResponse<'_, 'a> {
         F: FnOnce(&mut CreateEmbed) -> &mut CreateEmbed,
     {
         match self {
+            #[cfg(feature = "implicit-auto-embed")]
             CreateResponse::Message(response) => CreateResponse::Message(response.embed(f)),
             CreateResponse::Interaction(response) => CreateResponse::Interaction(response.embed(f)),
         }
@@ -75,6 +78,7 @@ impl<'a> CreateResponse<'_, 'a> {
 
     pub fn add_file<T: Into<AttachmentType<'a>>>(self, file: T) -> Self {
         match self {
+            #[cfg(feature = "implicit-auto-embed")]
             CreateResponse::Message(response) => CreateResponse::Message(response.add_file(file)),
             CreateResponse::Interaction(response) => CreateResponse::Interaction(response.add_file(file)),
         }

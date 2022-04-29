@@ -19,7 +19,6 @@ use serenity::{
 };
 use settings::RuntimeSettings;
 use std::{
-    fmt::Display,
     fs::File,
     path::{Path, PathBuf},
 };
@@ -29,13 +28,6 @@ pub struct SettingsKey;
 
 impl TypeMapKey for SettingsKey {
     type Value = RuntimeSettings;
-}
-
-pub fn display_settings_value<'v>(settings: &'v RuntimeSettings, opt: &str) -> &'v dyn Display {
-    match opt {
-        "do-implicit-auto-embed" => &settings.do_implicit_auto_embed,
-        _ => panic!("invalid settings key"),
-    }
 }
 
 #[derive(Default)]
@@ -76,6 +68,7 @@ impl EmbedBot {
 
 #[async_trait]
 impl EventHandler for EmbedBot {
+    #[cfg(feature = "implicit-auto-embed")]
     async fn message(&self, ctx: Context, msg: Message) {
         if !msg.author.bot {
             let do_implicit_auto_embed = ctx
@@ -100,7 +93,7 @@ impl EventHandler for EmbedBot {
 
                         let mut urls = urls.into_iter().map(|u| Url::parse(u).unwrap());
 
-                        let comments = comments.into_iter().intersperse("\n").collect::<String>();
+                        let comments: String = comments.into_iter().intersperse("\n").collect();
 
                         (urls.next(), Some(comments))
                     }
@@ -134,14 +127,6 @@ impl EventHandler for EmbedBot {
                         }
                         Err(e) => {
                             eprintln!("[Error] {}", e);
-
-                            msg.channel_id
-                                .send_message(&ctx, |response| {
-                                    Self::reply_error(&format!("{}", e), CreateResponse::Message(response));
-                                    response
-                                })
-                                .await
-                                .unwrap();
                         }
                     }
                 }
@@ -189,38 +174,41 @@ impl EventHandler for EmbedBot {
                     option
                         .name("get")
                         .description("view a bot setting")
-                        .kind(ApplicationCommandOptionType::SubCommandGroup)
-                        .create_sub_option(|option| {
-                            option
-                                .name("do-implicit-auto-embed")
-                                .description("try to embed urls even when not explicitly called")
-                                .kind(ApplicationCommandOptionType::SubCommand)
-                        })
-                        .create_sub_option(|option| {
-                            option
-                                .name("all")
-                                .description("all settings")
-                                .kind(ApplicationCommandOptionType::SubCommand)
-                        })
+                        .kind(ApplicationCommandOptionType::SubCommandGroup);
+
+                    #[cfg(feature = "implicit-auto-embed")]
+                    option.create_sub_option(|option| {
+                        option
+                            .name("do-implicit-auto-embed")
+                            .description("try to embed urls even when not explicitly called")
+                            .kind(ApplicationCommandOptionType::SubCommand)
+                    });
+
+                    option
                 })
                 .create_option(|option| {
                     option
                         .name("set")
                         .description("change a bot setting")
-                        .kind(ApplicationCommandOptionType::SubCommandGroup)
-                        .create_sub_option(|option| {
-                            option
-                                .name("do-implicit-auto-embed")
-                                .description("try to embed urls even when not explicitly called")
-                                .kind(ApplicationCommandOptionType::SubCommand)
-                                .create_sub_option(|option| {
-                                    option
-                                        .name("value")
-                                        .description("the new value")
-                                        .required(true)
-                                        .kind(ApplicationCommandOptionType::Boolean)
-                                })
-                        })
+                        .kind(ApplicationCommandOptionType::SubCommandGroup);
+
+
+                    #[cfg(feature = "implicit-auto-embed")]
+                    option.create_sub_option(|option| {
+                        option
+                            .name("do-implicit-auto-embed")
+                            .description("try to embed urls even when not explicitly called")
+                            .kind(ApplicationCommandOptionType::SubCommand)
+                            .create_sub_option(|option| {
+                                option
+                                    .name("value")
+                                    .description("the new value")
+                                    .required(true)
+                                    .kind(ApplicationCommandOptionType::Boolean)
+                            })
+                    });
+
+                    option
                 })
         })
         .await
@@ -309,6 +297,13 @@ impl EventHandler for EmbedBot {
                     }
                 }
                 ApplicationCommandInteractionData { name, options, .. } if name == "settings" => {
+                    let reply_invalid_setting = command.create_interaction_response(&ctx, |response| {
+                        response.interaction_response_data(|data| {
+                            Self::reply_error("invalid setting", CreateResponse::Interaction(data));
+                            data
+                        })
+                    });
+
                     match options.first().unwrap() {
                         ApplicationCommandInteractionDataOption { name, options, .. } if name == "get" => {
                             let key = &options.first().unwrap().name;
@@ -316,37 +311,27 @@ impl EventHandler for EmbedBot {
                             let data = ctx.data.read().await;
                             let settings = data.get::<SettingsKey>().unwrap();
 
-                            if key == "all" {
-                                command
-                                    .create_interaction_response(&ctx, |response| {
-                                        response.interaction_response_data(|data| {
-                                            data.embed(|e| {
-                                                e.title(":ballot_box_with_check: Current setting values").field(
-                                                    "do-implicit-auto-embed",
-                                                    settings.do_implicit_auto_embed,
-                                                    true,
-                                                )
-                                            })
+                            let value: String = match key.as_str() {
+                                #[cfg(feature = "implicit-auto-embed")]
+                                "do-implicit-auto-embed" => settings.do_implicit_auto_embed.to_string(),
+                                _ => {
+                                    reply_invalid_setting.await.unwrap();
+
+                                    return;
+                                }
+                            };
+
+                            command
+                                .create_interaction_response(&ctx, |response| {
+                                    response.interaction_response_data(|data| {
+                                        data.embed(|e| {
+                                            e.title(":ballot_box_with_check: Current setting value")
+                                                .field(key, value, true)
                                         })
                                     })
-                                    .await
-                                    .unwrap();
-                            } else {
-                                command
-                                    .create_interaction_response(&ctx, |response| {
-                                        response.interaction_response_data(|data| {
-                                            data.embed(|e| {
-                                                e.title(":ballot_box_with_check: Current setting value").field(
-                                                    key,
-                                                    display_settings_value(settings, key),
-                                                    true,
-                                                )
-                                            })
-                                        })
-                                    })
-                                    .await
-                                    .unwrap();
-                            }
+                                })
+                                .await
+                                .unwrap();
                         }
                         ApplicationCommandInteractionDataOption { name, options, .. } if name == "set" => {
                             let key_opt = &options.first().unwrap();
@@ -356,6 +341,7 @@ impl EventHandler for EmbedBot {
                             let mut data = ctx.data.write().await;
                             let settings = data.get_mut::<SettingsKey>().unwrap();
 
+                            #[allow(unused)]
                             let value = &key_opt
                                 .options
                                 .iter()
@@ -366,10 +352,14 @@ impl EventHandler for EmbedBot {
                                 .unwrap();
 
                             match key.as_str() {
+                                #[cfg(feature = "implicit-auto-embed")]
                                 "do-implicit-auto-embed" => {
                                     settings.do_implicit_auto_embed = value.as_bool().unwrap();
                                 }
-                                _ => panic!("invalid setting"),
+                                _ => {
+                                    reply_invalid_setting.await.unwrap();
+                                    return;
+                                }
                             }
 
                             match File::create(&self.settings_path) {
@@ -393,7 +383,7 @@ impl EventHandler for EmbedBot {
                                 .await
                                 .unwrap();
                         }
-                        _ => panic!("invalid settings subcommand"),
+                        _ => panic!("invalid settings subcommand received"),
                     }
                 }
                 _ => (),
