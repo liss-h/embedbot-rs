@@ -3,18 +3,23 @@
     "modules": {
         "reddit": {
             "embed_set": [
-                [
-                    "Image",
-                    "Any"
-                ],
-                [
-                    "Gallery",
-                    "Any"
-                ],
-                [
-                    "Text",
-                    "Any"
-                ]
+                {
+                    "content_type": "Image"
+                },
+                {
+                    "content_type": "Gallery"
+                },
+                {
+                    "content_type": "Text"
+                },
+                {
+                    "content_type": "Video",
+                    "origin_type": "Crossposted"
+                },
+                {
+                    "content_type": "Video",
+                    "nsfw_type": "Nsfw"
+                }
             ]
         },
         "ninegag": {

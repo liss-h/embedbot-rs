@@ -1,5 +1,7 @@
 #![cfg(feature = "reddit")]
 
+pub mod module_settings;
+
 use super::{
     escape_markdown, include_author_comment, limit_descr_len, limit_len, url_path_ends_with,
     url_path_ends_with_image_extension, wget_json, CreateResponse, EmbedOptions, Error, Post as PostTrait, PostScraper,
@@ -9,7 +11,7 @@ use json_nav::json_nav;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serenity::{async_trait, builder::CreateEmbed, model::user::User};
-use std::{collections::HashSet, convert::TryInto};
+use std::convert::TryInto;
 use url::Url;
 
 fn fmt_title(p: &PostCommonData) -> String {
@@ -211,25 +213,9 @@ impl PostTrait for Post {
     }
 }
 
-#[derive(Serialize, Deserialize, Eq, PartialEq, Hash, Copy, Clone, Debug)]
-pub enum SettingsPostType {
-    Text,
-    Image,
-    Gallery,
-    Video,
-    Any,
-}
-
-#[derive(Serialize, Deserialize, Eq, PartialEq, Hash, Debug)]
-pub enum SettingsCrosspostType {
-    Crossposted,
-    NonCrossposted,
-    Any,
-}
-
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ApiSettings {
-    pub embed_set: HashSet<(SettingsPostType, SettingsCrosspostType)>,
+    pub embed_set: module_settings::EmbedSet,
 }
 
 pub struct Api {
@@ -384,21 +370,29 @@ impl PostScraper for Api {
     }
 
     fn should_embed(&self, post: &Self::Output) -> bool {
-        let ptype = match &post.specialized {
-            PostSpecializedData::Text => SettingsPostType::Text,
-            PostSpecializedData::Gallery { .. } => SettingsPostType::Gallery,
-            PostSpecializedData::Image { .. } => SettingsPostType::Image,
-            PostSpecializedData::Video { .. } => SettingsPostType::Video,
+        let content_type = match &post.specialized {
+            PostSpecializedData::Text => module_settings::ContentType::Text,
+            PostSpecializedData::Gallery { .. } => module_settings::ContentType::Gallery,
+            PostSpecializedData::Image { .. } => module_settings::ContentType::Image,
+            PostSpecializedData::Video { .. } => module_settings::ContentType::Video,
         };
 
-        let porig = match &post.common.subreddit {
-            PostOrigin::JustSubreddit(_) => SettingsCrosspostType::NonCrossposted,
-            PostOrigin::Crossposted { .. } => SettingsCrosspostType::Crossposted,
+        let origin_type = match &post.common.subreddit {
+            PostOrigin::JustSubreddit(_) => module_settings::OriginType::NonCrossposted,
+            PostOrigin::Crossposted { .. } => module_settings::OriginType::Crossposted,
         };
 
-        let s = &self.settings.embed_set;
+        let nsfw_type = match &post.common.show_mode {
+            PostShowMode::Default => module_settings::NsfwType::Sfw,
+            PostShowMode::Nsfw => module_settings::NsfwType::Nsfw,
+            PostShowMode::Spoiler => module_settings::NsfwType::Sfw,
+        };
 
-        s.contains(&(ptype, SettingsCrosspostType::Any)) || s.contains(&(ptype, porig))
+        self.settings.embed_set.contains(&module_settings::PostClassification {
+            content_type,
+            origin_type,
+            nsfw_type,
+        })
     }
 
     async fn get_post(&self, url: Url) -> Result<Self::Output, Error> {
@@ -413,7 +407,7 @@ mod tests {
 
     #[tokio::test]
     async fn image_post() {
-        const JSON: &str = include_str!("../../test_data/reddit/image.json");
+        const JSON: &str = include_str!("../../../test_data/reddit/image.json");
         let json: Value = serde_json::from_str(JSON).unwrap();
 
         let url = "https://www.reddit.com/r/Awwducational/comments/oi687m/a_very_rare_irrawaddy_dolphin_only_92_are/";
@@ -439,7 +433,7 @@ mod tests {
 
     #[tokio::test]
     async fn video_post() {
-        const JSON: &str = include_str!("../../test_data/reddit/video.json");
+        const JSON: &str = include_str!("../../../test_data/reddit/video.json");
         let json: Value = serde_json::from_str(JSON).unwrap();
 
         let url = "https://www.reddit.com/r/aww/comments/oi6lfk/mama_cat_wants_her_kitten_to_be_friends_with/";
@@ -468,7 +462,7 @@ mod tests {
 
     #[tokio::test]
     async fn gallery_post() {
-        const JSON: &str = include_str!("../../test_data/reddit/gallery.json");
+        const JSON: &str = include_str!("../../../test_data/reddit/gallery.json");
         let json: Value = serde_json::from_str(JSON).unwrap();
 
         let url =

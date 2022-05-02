@@ -126,7 +126,7 @@ impl EventHandler for EmbedBot {
                             println!("[Info] ignoring {}: not supposed to embed", url);
                         }
                         Err(e) => {
-                            eprintln!("[Error] {}", e);
+                            eprintln!("[Error] while trying to embed {}: {}", url, e);
                         }
                     }
                 }
