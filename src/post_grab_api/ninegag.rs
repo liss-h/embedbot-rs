@@ -1,15 +1,20 @@
 #![cfg(feature = "ninegag")]
 
 use super::{
-    escape_markdown, limit_len, wget_html, CreateResponse, EmbedOptions, Error, Post as PostTrait, PostScraper,
-    EMBED_TITLE_MAX_LEN,
+    escape_markdown, include_author_comment, limit_len, wget, CreateResponse, EmbedOptions, Error, Post as PostTrait,
+    PostScraper, EMBED_TITLE_MAX_LEN,
 };
-use crate::post_grab_api::include_author_comment;
 use json_nav::json_nav;
+use reqwest::IntoUrl;
 use serde::{Deserialize, Serialize};
 use serenity::{async_trait, model::user::User};
 use std::collections::HashSet;
 use url::Url;
+
+async fn wget_html<U: IntoUrl>(url: U) -> Result<scraper::Html, Error> {
+    let resp = wget(url).await?;
+    Ok(scraper::Html::parse_document(&resp.text().await?))
+}
 
 fn fmt_title(p: &Post) -> String {
     let em = escape_markdown(&p.title);

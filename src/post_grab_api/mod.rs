@@ -1,4 +1,3 @@
-pub mod imgur;
 pub mod ninegag;
 pub mod reddit;
 pub mod svg;

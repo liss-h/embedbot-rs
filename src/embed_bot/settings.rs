@@ -21,9 +21,6 @@ pub struct Modules {
     #[cfg(feature = "ninegag")]
     pub ninegag: Option<post_grab_api::ninegag::ApiSettings>,
 
-    #[cfg(feature = "imgur")]
-    pub imgur: Option<post_grab_api::imgur::ApiSettings>,
-
     #[cfg(feature = "svg")]
     pub svg: Option<post_grab_api::svg::ApiSettings>,
 }

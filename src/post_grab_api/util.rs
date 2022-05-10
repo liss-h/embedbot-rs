@@ -22,12 +22,6 @@ pub async fn wget<U: IntoUrl>(url: U) -> Result<reqwest::Response, Error> {
         .map_err(Into::into)
 }
 
-#[cfg(feature = "scraper")]
-pub async fn wget_html<U: IntoUrl>(url: U) -> Result<scraper::Html, Error> {
-    let resp = wget(url).await?;
-    Ok(scraper::Html::parse_document(&resp.text().await?))
-}
-
 pub async fn wget_json<U: IntoUrl>(url: U) -> Result<serde_json::Value, Error> {
     wget(url).await?.json().await.map_err(Into::into)
 }

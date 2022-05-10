@@ -59,11 +59,6 @@ async fn main() {
                 e.register_api(post_grab_api::ninegag::Api { settings });
             }
 
-            #[cfg(feature = "imgur")]
-            if let Some(settings) = modules.imgur {
-                e.register_api(post_grab_api::imgur::Api { settings });
-            }
-
             #[cfg(feature = "svg")]
             if let Some(settings) = modules.svg {
                 e.register_api(post_grab_api::svg::Api { settings });

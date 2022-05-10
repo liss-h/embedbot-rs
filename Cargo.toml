@@ -12,9 +12,7 @@ serde_json = "^1.0"
 thiserror = "^1.0"
 tokio = { version = "^1.0", features = ["macros", "rt-multi-thread"] }
 url = "2.2.1"
-
-# TODO change back to crates.io version when commit dd9d255 in release
-serenity = { git = "https://github.com/serenity-rs/serenity", rev = "b2ae872", default-features = false, features = ["rustls_backend", "model", "client", "gateway"] }
+serenity = { version = "0.11.2", default-features = false, features = ["rustls_backend", "model", "client", "gateway"] }
 
 resvg = { version = "0.19.0", optional = true }
 usvg = { version = "0.19.0", optional = true }
@@ -24,9 +22,8 @@ scraper = { version = "0.12.0", optional = true }
 json_nav = { git = "https://github.com/Clueliss/json_nav", optional = true }
 
 [features]
-default = ["reddit", "ninegag", "svg", "imgur", "implicit-auto-embed"]
+default = ["reddit", "ninegag", "svg", "implicit-auto-embed"]
 svg = ["dep:resvg", "dep:usvg", "dep:tiny-skia", "dep:tempfile"]
 reddit = ["dep:json_nav"]
-ninegag = ["scraper", "dep:json_nav"]
-imgur = ["scraper"]
+ninegag = ["dep:scraper", "dep:json_nav"]
 implicit-auto-embed = []

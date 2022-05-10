@@ -47,13 +47,10 @@ pub struct EmbedSet(pub Vec<FuzzyPostClassification>);
 
 impl EmbedSet {
     pub fn contains(&self, post_class: &PostClassification) -> bool {
-        self.0
-            .iter()
-            .find(|pc| {
-                fuzzy_contains(&pc.content_type, &post_class.content_type)
-                    && fuzzy_contains(&pc.origin_type, &post_class.origin_type)
-                    && fuzzy_contains(&pc.nsfw_type, &post_class.nsfw_type)
-            })
-            .is_some()
+        self.0.iter().any(|pc| {
+            fuzzy_contains(&pc.content_type, &post_class.content_type)
+                && fuzzy_contains(&pc.origin_type, &post_class.origin_type)
+                && fuzzy_contains(&pc.nsfw_type, &post_class.nsfw_type)
+        })
     }
 }
