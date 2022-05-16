@@ -96,7 +96,7 @@ impl EventHandler for EmbedBot {
                         let comments: String = comments.into_iter().intersperse("\n").collect();
 
                         (urls.next(), Some(comments))
-                    }
+                    },
                 };
 
                 if let Some(url) = url {
@@ -108,7 +108,7 @@ impl EventHandler for EmbedBot {
                                         &msg.author,
                                         &EmbedOptions {
                                             comment,
-                                            ignore_nsfw: false,
+                                            ..Default::default()
                                         },
                                         CreateResponse::Message(response),
                                     );
@@ -118,16 +118,16 @@ impl EventHandler for EmbedBot {
                                 .unwrap();
 
                             msg.delete(&ctx).await.unwrap();
-                        }
+                        },
                         Err(Error::NoApiAvailable) => {
                             println!("[Info] not embedding {}: no api available", url);
-                        }
+                        },
                         Err(Error::NotSupposedToEmbed(_)) => {
                             println!("[Info] ignoring {}: not supposed to embed", url);
-                        }
+                        },
                         Err(e) => {
                             eprintln!("[Error] while trying to embed {}: {}", url, e);
-                        }
+                        },
                     }
                 }
             }
@@ -151,6 +151,13 @@ impl EventHandler for EmbedBot {
                     option
                         .name("ignore-nsfw")
                         .description("embed fully even if post is flagged as nsfw")
+                        .required(false)
+                        .kind(ApplicationCommandOptionType::Boolean)
+                })
+                .create_option(|option| {
+                    option
+                        .name("ignore-spoiler")
+                        .description("embed fully even if post is flagged as spoiler")
                         .required(false)
                         .kind(ApplicationCommandOptionType::Boolean)
                 })
@@ -243,7 +250,18 @@ impl EventHandler for EmbedBot {
                         .map(|c| c.as_bool().unwrap())
                         .unwrap_or(false);
 
-                    let opts = EmbedOptions { comment, ignore_nsfw };
+                    let ignore_spoiler = options
+                        .iter()
+                        .find(|c| c.name == "ignore-spoiler")
+                        .and_then(|c| c.value.as_ref())
+                        .map(|c| c.as_bool().unwrap())
+                        .unwrap_or(false);
+
+                    let opts = EmbedOptions {
+                        comment,
+                        ignore_nsfw,
+                        ignore_spoiler,
+                    };
 
                     match Url::parse(url) {
                         Ok(url) => {
@@ -262,7 +280,7 @@ impl EventHandler for EmbedBot {
                                         .unwrap();
 
                                     println!("[Info] embedded '{}': {:?}", url, post);
-                                }
+                                },
                                 Err(e) => {
                                     let msg = format!("{}", e);
                                     eprintln!("[Error] {msg}");
@@ -276,9 +294,9 @@ impl EventHandler for EmbedBot {
                                         })
                                         .await
                                         .unwrap();
-                                }
+                                },
                             }
-                        }
+                        },
                         Err(_) => {
                             command
                                 .create_interaction_response(&ctx, |resp| {
@@ -292,9 +310,9 @@ impl EventHandler for EmbedBot {
                                 })
                                 .await
                                 .unwrap();
-                        }
+                        },
                     }
-                }
+                },
                 ApplicationCommandInteractionData { name, options, .. } if name == "settings" => {
                     let reply_invalid_setting = command.create_interaction_response(&ctx, |response| {
                         response.interaction_response_data(|data| {
@@ -317,7 +335,7 @@ impl EventHandler for EmbedBot {
                                     reply_invalid_setting.await.unwrap();
 
                                     return;
-                                }
+                                },
                             };
 
                             command
@@ -331,7 +349,7 @@ impl EventHandler for EmbedBot {
                                 })
                                 .await
                                 .unwrap();
-                        }
+                        },
                         ApplicationCommandInteractionDataOption { name, options, .. } if name == "set" => {
                             let key_opt = &options.first().unwrap();
 
@@ -354,20 +372,20 @@ impl EventHandler for EmbedBot {
                                 #[cfg(feature = "implicit-auto-embed")]
                                 "do-implicit-auto-embed" => {
                                     settings.do_implicit_auto_embed = value.as_bool().unwrap();
-                                }
+                                },
                                 _ => {
                                     reply_invalid_setting.await.unwrap();
                                     return;
-                                }
+                                },
                             }
 
                             match File::create(&self.settings_path) {
                                 Ok(f) => {
                                     serde_json::to_writer_pretty(f, settings).unwrap();
-                                }
+                                },
                                 Err(e) => {
                                     eprintln!("[Error] unable to persist runtime settings: {}", e);
-                                }
+                                },
                             }
 
                             command
@@ -381,10 +399,10 @@ impl EventHandler for EmbedBot {
                                 })
                                 .await
                                 .unwrap();
-                        }
+                        },
                         _ => panic!("invalid settings subcommand received"),
                     }
-                }
+                },
                 _ => (),
             }
         }

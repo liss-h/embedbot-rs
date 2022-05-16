@@ -37,12 +37,12 @@ async fn main() {
             let s: RuntimeSettings = serde_json::from_reader(f).unwrap();
             println!("Loaded runtime settings: {:#?}", s);
             s
-        }
+        },
         Err(e) => {
             let s = RuntimeSettings::default();
             println!("Unable to open runtime settings (E: {:?}), using defaults: {:#?}", e, s);
             s
-        }
+        },
     };
 
     let embed_bot = {

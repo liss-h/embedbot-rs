@@ -31,7 +31,7 @@ fn fmt_title(p: &PostCommonData) -> String {
                 subreddit = to,
                 from = from,
             )
-        }
+        },
         PostOrigin::JustSubreddit(subreddit) => {
             let em = escape_markdown(&p.title);
             let title = limit_len(&em, EMBED_TITLE_MAX_LEN - 34 - subreddit.len() - flair.len()); // -34 for formatting
@@ -42,7 +42,7 @@ fn fmt_title(p: &PostCommonData) -> String {
                 flair = flair,
                 subreddit = subreddit,
             )
-        }
+        },
     }
 }
 
@@ -92,20 +92,14 @@ pub struct Comment {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum PostShowMode {
-    Default,
-    Nsfw,
-    Spoiler,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PostCommonData {
     src: Url,
     subreddit: PostOrigin,
     title: String,
     text: String,
     flair: String,
-    show_mode: PostShowMode,
+    nsfw: bool,
+    spoiler: bool,
     comment: Option<Comment>,
 }
 
@@ -156,50 +150,47 @@ fn manual_embed(author: &str, post: &PostCommonData, embed_urls: &[Url], discord
 
 impl PostTrait for Post {
     fn create_embed<'data>(&'data self, u: &User, opts: &EmbedOptions, response: CreateResponse<'_, 'data>) {
-        match self.common.show_mode {
-            PostShowMode::Nsfw if !opts.ignore_nsfw => {
-                response.embed(|e| {
-                    e.title(fmt_title(&self.common))
-                        .description("Warning NSFW: Click to view content")
-                        .author(|a| a.name(&u.name))
-                        .url(&self.common.src);
+        if self.common.nsfw && !opts.ignore_nsfw {
+            response.embed(|e| {
+                e.title(fmt_title(&self.common))
+                    .description("Warning NSFW: Click to view content")
+                    .author(|a| a.name(&u.name))
+                    .url(&self.common.src);
 
-                    if let Some(comment) = &opts.comment {
-                        include_author_comment(e, u, comment);
-                    }
+                if let Some(comment) = &opts.comment {
+                    include_author_comment(e, u, comment);
+                }
 
-                    e
-                });
-            }
-            PostShowMode::Spoiler => {
-                response.embed(|e| {
-                    e.title(fmt_title(&self.common))
-                        .description("Spoiler: Click to view content")
-                        .author(|a| a.name(&u.name))
-                        .url(&self.common.src);
+                e
+            });
+        } else if self.common.spoiler && !opts.ignore_spoiler {
+            response.embed(|e| {
+                e.title(fmt_title(&self.common))
+                    .description("Spoiler: Click to view content")
+                    .author(|a| a.name(&u.name))
+                    .url(&self.common.src);
 
-                    if let Some(comment) = &opts.comment {
-                        include_author_comment(e, u, comment);
-                    }
+                if let Some(comment) = &opts.comment {
+                    include_author_comment(e, u, comment);
+                }
 
-                    if let Some(comment) = &self.common.comment {
-                        include_comment(e, comment);
-                    }
+                if let Some(comment) = &self.common.comment {
+                    include_comment(e, comment);
+                }
 
-                    e
-                });
-            }
-
-            _ => match &self.specialized {
+                e
+            });
+        } else {
+            match &self.specialized {
                 PostSpecializedData::Text => {
                     response.embed(|e| base_embed(e, u, opts.comment.as_deref(), self));
-                }
+                },
                 PostSpecializedData::Image { img_url } => {
                     response.embed(|e| base_embed(e, u, opts.comment.as_deref(), self).image(&img_url));
-                }
+                },
                 PostSpecializedData::Gallery { img_urls } => {
                     response.content(manual_embed(&u.name, &self.common, img_urls, opts.comment.as_deref()));
-                }
+                },
                 PostSpecializedData::Video { video_url } => {
                     response.content(manual_embed(
                         &u.name,
@@ -207,8 +198,8 @@ impl PostTrait for Post {
                         &[video_url.clone()],
                         opts.comment.as_deref(),
                     ));
-                }
-            },
+                },
+            }
         }
     }
 }
@@ -275,15 +266,8 @@ impl Api {
             } else {
                 PostOrigin::JustSubreddit(subreddit)
             },
-
-            show_mode: if nsfw {
-                PostShowMode::Nsfw
-            } else if spoiler {
-                PostShowMode::Spoiler
-            } else {
-                PostShowMode::Default
-            },
-
+            nsfw,
+            spoiler,
             title,
             text,
             flair,
@@ -332,12 +316,12 @@ impl Api {
                     match url {
                         Ok(url) if url_path_ends_with_image_extension(&url) => {
                             PostSpecializedData::Image { img_url: url }
-                        }
+                        },
                         Ok(url) if url_path_ends_with(&url, ".gifv") => PostSpecializedData::Video { video_url: url },
                         _ => PostSpecializedData::Text,
                     }
                 }
-            }
+            },
         };
 
         Ok(Post {
@@ -382,10 +366,10 @@ impl PostScraper for Api {
             PostOrigin::Crossposted { .. } => module_settings::OriginType::Crossposted,
         };
 
-        let nsfw_type = match &post.common.show_mode {
-            PostShowMode::Default => module_settings::NsfwType::Sfw,
-            PostShowMode::Nsfw => module_settings::NsfwType::Nsfw,
-            PostShowMode::Spoiler => module_settings::NsfwType::Sfw,
+        let nsfw_type = if post.common.nsfw {
+            module_settings::NsfwType::Nsfw
+        } else {
+            module_settings::NsfwType::Sfw
         };
 
         self.settings.embed_set.contains(&module_settings::PostClassification {

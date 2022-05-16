@@ -43,10 +43,11 @@ pub enum Error {
     Navigation(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct EmbedOptions {
     pub comment: Option<String>,
     pub ignore_nsfw: bool,
+    pub ignore_spoiler: bool,
 }
 
 pub enum CreateResponse<'r, 'data> {

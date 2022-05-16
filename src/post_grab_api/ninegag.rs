@@ -50,7 +50,7 @@ impl PostTrait for Post {
 
                     e
                 });
-            }
+            },
             NineGagPostType::Video => {
                 let discord_comment = opts
                     .comment
@@ -66,7 +66,7 @@ impl PostTrait for Post {
                     discord_comment = discord_comment,
                     title = fmt_title(self),
                 ));
-            }
+            },
         }
     }
 }
@@ -144,7 +144,7 @@ impl PostScraper for Api {
                     NineGagPostType::Video,
                     json_nav! { img_alts => "url"; as str }?.to_string(),
                 )
-            }
+            },
 
             _ => (
                 NineGagPostType::Video,
