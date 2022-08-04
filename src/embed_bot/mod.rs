@@ -5,15 +5,15 @@ use serenity::{
     async_trait,
     client::{Context, EventHandler},
     model::{
+        application::{
+            command::{Command, CommandOptionType, CommandType},
+            interaction::{
+                application_command::{CommandData, CommandDataOption},
+                Interaction,
+            },
+        },
         channel::Message,
         gateway::Ready,
-        interactions::{
-            application_command::{ApplicationCommandInteractionData, ApplicationCommandOptionType},
-            Interaction,
-        },
-        prelude::application_command::{
-            ApplicationCommand, ApplicationCommandInteractionDataOption, ApplicationCommandType,
-        },
     },
     prelude::TypeMapKey,
 };
@@ -38,10 +38,7 @@ pub struct EmbedBot {
 
 impl EmbedBot {
     pub fn new<P: AsRef<Path>>(settings_path: P) -> Self {
-        EmbedBot {
-            settings_path: settings_path.as_ref().to_path_buf(),
-            apis: Vec::new(),
-        }
+        EmbedBot { settings_path: settings_path.as_ref().to_path_buf(), apis: Vec::new() }
     }
 
     pub fn find_api(&self, url: &Url) -> Option<&(dyn DynPostScraper + Send + Sync)> {
@@ -106,10 +103,7 @@ impl EventHandler for EmbedBot {
                                 .send_message(&ctx, |response| {
                                     post.create_embed(
                                         &msg.author,
-                                        &EmbedOptions {
-                                            comment,
-                                            ..Default::default()
-                                        },
+                                        &EmbedOptions { comment, ..Default::default() },
                                         CreateResponse::Message(response),
                                     );
                                     response
@@ -135,60 +129,60 @@ impl EventHandler for EmbedBot {
     }
 
     async fn ready(&self, ctx: Context, _ready: Ready) {
-        ApplicationCommand::create_global_application_command(&ctx, |command| {
+        Command::create_global_application_command(&ctx, |command| {
             command
                 .name("embed")
-                .kind(ApplicationCommandType::ChatInput)
+                .kind(CommandType::ChatInput)
                 .description("embed a post")
                 .create_option(|option| {
                     option
                         .name("url")
                         .description("url of the post")
                         .required(true)
-                        .kind(ApplicationCommandOptionType::String)
+                        .kind(CommandOptionType::String)
                 })
                 .create_option(|option| {
                     option
                         .name("ignore-nsfw")
                         .description("embed fully even if post is flagged as nsfw")
                         .required(false)
-                        .kind(ApplicationCommandOptionType::Boolean)
+                        .kind(CommandOptionType::Boolean)
                 })
                 .create_option(|option| {
                     option
                         .name("ignore-spoiler")
                         .description("embed fully even if post is flagged as spoiler")
                         .required(false)
-                        .kind(ApplicationCommandOptionType::Boolean)
+                        .kind(CommandOptionType::Boolean)
                 })
                 .create_option(|option| {
                     option
                         .name("comment")
                         .description("a personal comment to include")
                         .required(false)
-                        .kind(ApplicationCommandOptionType::String)
+                        .kind(CommandOptionType::String)
                 })
         })
         .await
         .unwrap();
 
-        ApplicationCommand::create_global_application_command(&ctx, |command| {
+        Command::create_global_application_command(&ctx, |command| {
             command
                 .name("settings")
                 .description("view or modify bot settings")
-                .kind(ApplicationCommandType::ChatInput)
+                .kind(CommandType::ChatInput)
                 .create_option(|option| {
                     option
                         .name("get")
                         .description("view a bot setting")
-                        .kind(ApplicationCommandOptionType::SubCommandGroup);
+                        .kind(CommandOptionType::SubCommandGroup);
 
                     #[cfg(feature = "implicit-auto-embed")]
                     option.create_sub_option(|option| {
                         option
                             .name("do-implicit-auto-embed")
                             .description("try to embed urls even when not explicitly called")
-                            .kind(ApplicationCommandOptionType::SubCommand)
+                            .kind(CommandOptionType::SubCommand)
                     });
 
                     option
@@ -197,20 +191,20 @@ impl EventHandler for EmbedBot {
                     option
                         .name("set")
                         .description("change a bot setting")
-                        .kind(ApplicationCommandOptionType::SubCommandGroup);
+                        .kind(CommandOptionType::SubCommandGroup);
 
                     #[cfg(feature = "implicit-auto-embed")]
                     option.create_sub_option(|option| {
                         option
                             .name("do-implicit-auto-embed")
                             .description("try to embed urls even when not explicitly called")
-                            .kind(ApplicationCommandOptionType::SubCommand)
+                            .kind(CommandOptionType::SubCommand)
                             .create_sub_option(|option| {
                                 option
                                     .name("value")
                                     .description("the new value")
                                     .required(true)
-                                    .kind(ApplicationCommandOptionType::Boolean)
+                                    .kind(CommandOptionType::Boolean)
                             })
                     });
 
@@ -226,7 +220,7 @@ impl EventHandler for EmbedBot {
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
         if let Interaction::ApplicationCommand(command) = &interaction {
             match &command.data {
-                ApplicationCommandInteractionData { name, options, .. } if name == "embed" => {
+                CommandData { name, options, .. } if name == "embed" => {
                     let url = options
                         .iter()
                         .find(|c| c.name == "url")
@@ -257,11 +251,7 @@ impl EventHandler for EmbedBot {
                         .map(|c| c.as_bool().unwrap())
                         .unwrap_or(false);
 
-                    let opts = EmbedOptions {
-                        comment,
-                        ignore_nsfw,
-                        ignore_spoiler,
-                    };
+                    let opts = EmbedOptions { comment, ignore_nsfw, ignore_spoiler };
 
                     match Url::parse(url) {
                         Ok(url) => {
@@ -313,7 +303,7 @@ impl EventHandler for EmbedBot {
                         },
                     }
                 },
-                ApplicationCommandInteractionData { name, options, .. } if name == "settings" => {
+                CommandData { name, options, .. } if name == "settings" => {
                     let reply_invalid_setting = command.create_interaction_response(&ctx, |response| {
                         response.interaction_response_data(|data| {
                             Self::reply_error("invalid setting", CreateResponse::Interaction(data));
@@ -322,7 +312,7 @@ impl EventHandler for EmbedBot {
                     });
 
                     match options.first().unwrap() {
-                        ApplicationCommandInteractionDataOption { name, options, .. } if name == "get" => {
+                        CommandDataOption { name, options, .. } if name == "get" => {
                             let key = &options.first().unwrap().name;
 
                             let data = ctx.data.read().await;
@@ -350,7 +340,7 @@ impl EventHandler for EmbedBot {
                                 .await
                                 .unwrap();
                         },
-                        ApplicationCommandInteractionDataOption { name, options, .. } if name == "set" => {
+                        CommandDataOption { name, options, .. } if name == "set" => {
                             let key_opt = &options.first().unwrap();
 
                             let key = &key_opt.name;

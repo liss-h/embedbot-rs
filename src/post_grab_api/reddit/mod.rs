@@ -259,10 +259,7 @@ impl Api {
             src: url,
 
             subreddit: if is_xpost {
-                PostOrigin::Crossposted {
-                    from: original_subreddit,
-                    to: subreddit,
-                }
+                PostOrigin::Crossposted { from: original_subreddit, to: subreddit }
             } else {
                 PostOrigin::JustSubreddit(subreddit)
             },
@@ -304,9 +301,7 @@ impl Api {
                         .map_err(|_| Error::JsonNav(json_nav::JsonNavError::TypeMismatch { expected: "url" }))?;
 
                     if urls.len() == 1 {
-                        PostSpecializedData::Image {
-                            img_url: urls.pop().unwrap(),
-                        }
+                        PostSpecializedData::Image { img_url: urls.pop().unwrap() }
                     } else {
                         PostSpecializedData::Gallery { img_urls: urls }
                     }
@@ -324,10 +319,7 @@ impl Api {
             },
         };
 
-        Ok(Post {
-            common: common_data,
-            specialized: specialized_data,
-        })
+        Ok(Post { common: common_data, specialized: specialized_data })
     }
 
     async fn scrape_post(&self, url: Url) -> Result<Post, Error> {
@@ -372,11 +364,9 @@ impl PostScraper for Api {
             module_settings::NsfwType::Sfw
         };
 
-        self.settings.embed_set.contains(&module_settings::PostClassification {
-            content_type,
-            origin_type,
-            nsfw_type,
-        })
+        self.settings
+            .embed_set
+            .contains(&module_settings::PostClassification { content_type, origin_type, nsfw_type })
     }
 
     async fn get_post(&self, url: Url) -> Result<Self::Output, Error> {
@@ -404,7 +394,8 @@ mod tests {
                 title: "A very rare Irrawaddy Dolphin, only 92 are estimated to still exist. These dolphins have a bulging forehead, short beak, and 12-19 teeth on each side of both jaws.".to_owned(),
                 text: "".to_owned(),
                 flair: "Not yet verified".to_owned(),
-                show_mode: PostShowMode::Default,
+                nsfw: false,
+                spoiler: false,
                 comment: None,
             },
             specialized: PostSpecializedData::Image {
@@ -433,7 +424,8 @@ mod tests {
                 title: "Mama cat wants her kitten to be friends with human baby.".to_owned(),
                 text: "".to_owned(),
                 flair: "".to_owned(),
-                show_mode: PostShowMode::Default,
+                nsfw: false,
+                spoiler: false,
                 comment: None,
             },
             specialized: PostSpecializedData::Video {
@@ -460,7 +452,8 @@ mod tests {
                 title: "Lian li o11D XL with 2x 3090 SLI triple radiator. done for now will upgrade the motherboard and cpu to threadripper in future. this case is solid!".to_owned(),
                 text: "".to_owned(),
                 flair: "Build Complete".to_owned(),
-                show_mode: PostShowMode::Default,
+                nsfw: false,
+                spoiler: false,
                 comment: None,
             },
             specialized: PostSpecializedData::Gallery {

@@ -35,10 +35,7 @@ impl Api {
 
         pix.save_png(&path).unwrap();
 
-        Ok(Post {
-            src: url,
-            converted: path,
-        })
+        Ok(Post { src: url, converted: path })
     }
 }
 
