@@ -1,6 +1,7 @@
 pub mod ninegag;
 pub mod reddit;
 pub mod svg;
+pub mod twitter;
 pub mod util;
 
 use serenity::{
@@ -38,7 +39,7 @@ pub enum Error {
     #[error("invalid svg")]
     SvgParse(#[from] usvg::Error),
 
-    #[cfg(any(feature = "imgur", feature = "ninegag"))]
+    #[cfg(any(feature = "imgur", feature = "ninegag", feature = "twitter"))]
     #[error("general navigation error: {0}")]
     Navigation(String),
 }

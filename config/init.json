@@ -1,5 +1,5 @@
 {
-    "discord_token": "YOUR DISCORD BOT TOKEN",
+    "discord_token": "YOUR_DISCORD_TOKEN",
     "modules": {
         "reddit": {
             "embed_set": [
@@ -27,6 +27,13 @@
                 "Image"
             ]
         },
-        "svg": {}
+        "svg": {},
+        "twitter": {
+            "embed_set": [
+                "Image",
+                "Video",
+                "Text"
+            ]
+        }
     }
 }

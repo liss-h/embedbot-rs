@@ -23,6 +23,9 @@ pub struct Modules {
 
     #[cfg(feature = "svg")]
     pub svg: Option<post_grab_api::svg::ApiSettings>,
+
+    #[cfg(feature = "twitter")]
+    pub twitter: Option<post_grab_api::twitter::ApiSettings>,
 }
 
 impl Default for RuntimeSettings {

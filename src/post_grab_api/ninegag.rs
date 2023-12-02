@@ -23,7 +23,7 @@ fn fmt_title(p: &Post) -> String {
     format!("'{}' - **9GAG**", title)
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum NineGagPostType {
     Image,
     Video,

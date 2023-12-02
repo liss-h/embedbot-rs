@@ -46,17 +46,22 @@ fn fmt_title(p: &PostCommonData) -> String {
     }
 }
 
-fn base_embed<'a>(e: &'a mut CreateEmbed, u: &User, comment: Option<&str>, post: &Post) -> &'a mut CreateEmbed {
-    e.title(&fmt_title(&post.common))
-        .description(limit_descr_len(&escape_markdown(&post.common.text)))
+fn base_embed<'a>(
+    e: &'a mut CreateEmbed,
+    u: &User,
+    comment: Option<&str>,
+    post: &PostCommonData,
+) -> &'a mut CreateEmbed {
+    e.title(&fmt_title(post))
+        .description(limit_descr_len(&escape_markdown(&post.text)))
         .author(|a| a.name(&u.name))
-        .url(&post.common.src);
+        .url(&post.src);
 
     if let Some(comment) = comment {
         include_author_comment(e, u, comment);
     }
 
-    if let Some(comment) = &post.common.comment {
+    if let Some(comment) = &post.comment {
         include_comment(e, comment);
     }
 
@@ -183,10 +188,10 @@ impl PostTrait for Post {
         } else {
             match &self.specialized {
                 PostSpecializedData::Text => {
-                    response.embed(|e| base_embed(e, u, opts.comment.as_deref(), self));
+                    response.embed(|e| base_embed(e, u, opts.comment.as_deref(), &self.common));
                 },
                 PostSpecializedData::Image { img_url } => {
-                    response.embed(|e| base_embed(e, u, opts.comment.as_deref(), self).image(&img_url));
+                    response.embed(|e| base_embed(e, u, opts.comment.as_deref(), &self.common).image(&img_url));
                 },
                 PostSpecializedData::Gallery { img_urls } => {
                     response.content(manual_embed(&u.name, &self.common, img_urls, opts.comment.as_deref()));

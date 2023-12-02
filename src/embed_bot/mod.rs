@@ -114,13 +114,13 @@ impl EventHandler for EmbedBot {
                             msg.delete(&ctx).await.unwrap();
                         },
                         Err(Error::NoApiAvailable) => {
-                            println!("[Info] not embedding {}: no api available", url);
+                            tracing::info!("not embedding {}: no api available", url);
                         },
                         Err(Error::NotSupposedToEmbed(_)) => {
-                            println!("[Info] ignoring {}: not supposed to embed", url);
+                            tracing::info!("ignoring {}: not supposed to embed", url);
                         },
                         Err(e) => {
-                            eprintln!("[Error] while trying to embed {}: {}", url, e);
+                            tracing::error!("[Error] while trying to embed {}: {}", url, e);
                         },
                     }
                 }
@@ -214,7 +214,7 @@ impl EventHandler for EmbedBot {
         .await
         .unwrap();
 
-        println!("[Info] logged in");
+        tracing::info!("logged in");
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
@@ -269,11 +269,11 @@ impl EventHandler for EmbedBot {
                                         .await
                                         .unwrap();
 
-                                    println!("[Info] embedded '{}': {:?}", url, post);
+                                    tracing::trace!("embedded '{}': {:?}", url, post);
                                 },
                                 Err(e) => {
                                     let msg = format!("{}", e);
-                                    eprintln!("[Error] {msg}");
+                                    tracing::error!("[Error] {msg}");
 
                                     command
                                         .create_interaction_response(&ctx, |resp| {
@@ -374,7 +374,7 @@ impl EventHandler for EmbedBot {
                                     serde_json::to_writer_pretty(f, settings).unwrap();
                                 },
                                 Err(e) => {
-                                    eprintln!("[Error] unable to persist runtime settings: {}", e);
+                                    tracing::error!("unable to persist runtime settings: {}", e);
                                 },
                             }
 
