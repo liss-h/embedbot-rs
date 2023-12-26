@@ -176,7 +176,7 @@ impl PostScraper for Api {
 
                 html.select(&selector)
                     .filter_map(|e| e.attr("src"))
-                    .filter(|src| src.starts_with("https://pbs.twimg.com/"))
+                    .filter(|src| src.starts_with("https://pbs.twimg.com/media"))
                     .filter_map(|s| Url::parse(&s).ok())
                     .collect()
             };
