@@ -4,15 +4,20 @@ pub mod module_settings;
 
 use super::{
     escape_markdown, include_author_comment, limit_descr_len, limit_len, url_path_ends_with,
-    url_path_ends_with_image_extension, wget_json, CreateResponse, EmbedOptions, Error, Post as PostTrait, PostScraper,
-    EMBED_TITLE_MAX_LEN,
+    url_path_ends_with_image_extension, wget, wget_json, CreateResponse, EmbedOptions, Error, Post as PostTrait,
+    PostScraper, EMBED_TITLE_MAX_LEN,
 };
 use json_nav::json_nav;
+use reqwest::IntoUrl;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serenity::{async_trait, builder::CreateEmbed, model::user::User};
 use std::convert::TryInto;
 use url::Url;
+
+async fn find_canonical_post_url<U: IntoUrl>(post_url: U) -> Result<Url, Error> {
+    Ok(wget(post_url).await?.url().clone())
+}
 
 fn fmt_title(p: &PostCommonData) -> String {
     let flair = (!p.flair.is_empty())
@@ -329,7 +334,7 @@ impl Api {
 
     async fn scrape_post(&self, url: Url) -> Result<Post, Error> {
         let (url, json) = {
-            let mut u = url;
+            let mut u = find_canonical_post_url(url).await?;
             u.set_query(None);
 
             let mut get_url = u.clone();
