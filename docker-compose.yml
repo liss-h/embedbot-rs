@@ -3,5 +3,4 @@ services:
     embed_bot:
         build: .
         volumes:
-            - ./config/init.json:/etc/embedbot/init.json:ro
-            - ./config/runtime.json:/etc/embedbot/runtime.json
+            - ./config/embedbot.json:/etc/embedbot/embedbot.json:ro

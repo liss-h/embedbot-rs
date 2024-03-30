@@ -7,7 +7,11 @@ use super::{
 use itertools::Itertools;
 use scraper::Html;
 use serde::{Deserialize, Serialize};
-use serenity::{async_trait, builder::CreateEmbed, model::user::User};
+use serenity::{
+    async_trait,
+    builder::{CreateEmbed, CreateEmbedAuthor, CreateEmbedFooter},
+    model::user::User,
+};
 use std::collections::HashSet;
 use url::Url;
 
@@ -52,19 +56,15 @@ pub struct Post {
     specialized: PostSpecializedData,
 }
 
-fn base_embed<'a>(
-    e: &'a mut CreateEmbed,
-    u: &User,
-    comment: Option<&str>,
-    post: &PostCommonData,
-) -> &'a mut CreateEmbed {
-    e.author(|a| a.name(&u.name))
+fn base_embed(e: CreateEmbed, u: &User, comment: Option<&str>, post: &PostCommonData) -> CreateEmbed {
+    let mut e = e
+        .author(CreateEmbedAuthor::new(&u.name))
         .title(fmt_title(post))
         .description(limit_descr_len(&post.text))
-        .url(&post.src);
+        .url(post.src.as_str());
 
     if let Some(comment) = comment {
-        include_author_comment(e, u, comment);
+        e = include_author_comment(e, u, comment);
     }
 
     e
@@ -88,32 +88,30 @@ fn manual_embed(u: &User, post: &PostCommonData, embed_urls: &[Url], discord_com
 }
 
 impl PostTrait for Post {
-    fn create_embed<'data>(&'data self, u: &User, opts: &EmbedOptions, response: CreateResponse<'_, 'data>) {
+    fn create_embed<'data>(&'data self, u: &User, opts: &EmbedOptions, response: CreateResponse) -> CreateResponse {
         match &self.specialized {
             PostSpecializedData::Text => {
-                response.embed(|e| base_embed(e, u, opts.comment.as_deref(), &self.common));
+                response.embed(base_embed(CreateEmbed::new(), u, opts.comment.as_deref(), &self.common))
             },
-            PostSpecializedData::Image { img_src } if img_src.len() == 1 => {
-                response.embed(|e| base_embed(e, u, opts.comment.as_deref(), &self.common).image(&img_src[0]));
-            },
+            PostSpecializedData::Image { img_src } if img_src.len() == 1 => response.embed(
+                base_embed(CreateEmbed::new(), u, opts.comment.as_deref(), &self.common).image(img_src[0].as_str()),
+            ),
             PostSpecializedData::Image { img_src } => {
-                response.content(manual_embed(u, &self.common, &img_src, opts.comment.as_deref()));
+                response.content(manual_embed(u, &self.common, &img_src, opts.comment.as_deref()))
             },
-            PostSpecializedData::Video { video_src } => {
-                response.content(manual_embed(
-                    u,
-                    &self.common,
-                    &[video_src.clone()],
-                    opts.comment.as_deref(),
-                ));
-            },
-            PostSpecializedData::VideoPreview { thumbnail_src } => {
-                response.embed(|e| {
-                    base_embed(e, u, opts.comment.as_deref(), &self.common)
-                        .image(thumbnail_src)
-                        .footer(|f| f.text("This was originally a video. Click to watch on twitter."))
-                });
-            },
+            PostSpecializedData::Video { video_src } => response.content(manual_embed(
+                u,
+                &self.common,
+                &[video_src.clone()],
+                opts.comment.as_deref(),
+            )),
+            PostSpecializedData::VideoPreview { thumbnail_src } => response.embed(
+                base_embed(CreateEmbed::new(), u, opts.comment.as_deref(), &self.common)
+                    .image(thumbnail_src.as_str())
+                    .footer(CreateEmbedFooter::new(
+                        "This was originally a video. Click to watch on twitter.",
+                    )),
+            ),
         }
     }
 }

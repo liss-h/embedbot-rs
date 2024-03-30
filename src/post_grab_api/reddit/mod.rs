@@ -12,7 +12,11 @@ use json_nav::json_nav;
 use reqwest::IntoUrl;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use serenity::{async_trait, builder::CreateEmbed, model::user::User};
+use serenity::{
+    async_trait,
+    builder::{CreateEmbed, CreateEmbedAuthor},
+    model::user::User,
+};
 use std::convert::TryInto;
 use url::Url;
 
@@ -52,29 +56,25 @@ fn fmt_title(p: &PostCommonData) -> String {
     }
 }
 
-fn base_embed<'a>(
-    e: &'a mut CreateEmbed,
-    u: &User,
-    comment: Option<&str>,
-    post: &PostCommonData,
-) -> &'a mut CreateEmbed {
-    e.title(&fmt_title(post))
+fn base_embed(e: CreateEmbed, u: &User, comment: Option<&str>, post: &PostCommonData) -> CreateEmbed {
+    let mut e = e
+        .title(&fmt_title(post))
         .description(limit_descr_len(&escape_markdown(&post.text)))
-        .author(|a| a.name(&u.name))
-        .url(&post.src);
+        .author(CreateEmbedAuthor::new(&u.name))
+        .url(post.src.as_str());
 
     if let Some(comment) = comment {
-        include_author_comment(e, u, comment);
+        e = include_author_comment(e, u, comment);
     }
 
     if let Some(comment) = &post.comment {
-        include_comment(e, comment);
+        e = include_comment(e, comment);
     }
 
     e
 }
 
-fn include_comment<'a>(e: &'a mut CreateEmbed, comment: &Comment) -> &'a mut CreateEmbed {
+fn include_comment(e: CreateEmbed, comment: &Comment) -> CreateEmbed {
     let name = format!("Comment by Reddit User '{author}'", author = comment.author);
     e.field(name, escape_markdown(&comment.body), true)
 }
@@ -160,56 +160,56 @@ fn manual_embed(author: &str, post: &PostCommonData, embed_urls: &[Url], discord
 }
 
 impl PostTrait for Post {
-    fn create_embed<'data>(&'data self, u: &User, opts: &EmbedOptions, response: CreateResponse<'_, 'data>) {
+    fn create_embed<'data>(&'data self, u: &User, opts: &EmbedOptions, response: CreateResponse) -> CreateResponse {
         if self.common.nsfw && !opts.ignore_nsfw {
-            response.embed(|e| {
-                e.title(fmt_title(&self.common))
+            response.embed({
+                let mut e = CreateEmbed::new()
+                    .title(fmt_title(&self.common))
                     .description("Warning NSFW: Click to view content")
-                    .author(|a| a.name(&u.name))
-                    .url(&self.common.src);
+                    .author(CreateEmbedAuthor::new(&u.name))
+                    .url(self.common.src.as_str());
 
                 if let Some(comment) = &opts.comment {
-                    include_author_comment(e, u, comment);
+                    e = include_author_comment(e, u, comment);
                 }
 
                 e
-            });
+            })
         } else if self.common.spoiler && !opts.ignore_spoiler {
-            response.embed(|e| {
-                e.title(fmt_title(&self.common))
+            response.embed({
+                let mut e = CreateEmbed::new()
+                    .title(fmt_title(&self.common))
                     .description("Spoiler: Click to view content")
-                    .author(|a| a.name(&u.name))
-                    .url(&self.common.src);
+                    .author(CreateEmbedAuthor::new(&u.name))
+                    .url(self.common.src.as_str());
 
                 if let Some(comment) = &opts.comment {
-                    include_author_comment(e, u, comment);
+                    e = include_author_comment(e, u, comment);
                 }
 
                 if let Some(comment) = &self.common.comment {
-                    include_comment(e, comment);
+                    e = include_comment(e, comment);
                 }
 
                 e
-            });
+            })
         } else {
             match &self.specialized {
                 PostSpecializedData::Text => {
-                    response.embed(|e| base_embed(e, u, opts.comment.as_deref(), &self.common));
+                    response.embed(base_embed(CreateEmbed::new(), u, opts.comment.as_deref(), &self.common))
                 },
-                PostSpecializedData::Image { img_url } => {
-                    response.embed(|e| base_embed(e, u, opts.comment.as_deref(), &self.common).image(&img_url));
-                },
+                PostSpecializedData::Image { img_url } => response.embed(
+                    base_embed(CreateEmbed::new(), u, opts.comment.as_deref(), &self.common).image(img_url.as_str()),
+                ),
                 PostSpecializedData::Gallery { img_urls } => {
-                    response.content(manual_embed(&u.name, &self.common, img_urls, opts.comment.as_deref()));
+                    response.content(manual_embed(&u.name, &self.common, img_urls, opts.comment.as_deref()))
                 },
-                PostSpecializedData::Video { video_url } => {
-                    response.content(manual_embed(
-                        &u.name,
-                        &self.common,
-                        &[video_url.clone()],
-                        opts.comment.as_deref(),
-                    ));
-                },
+                PostSpecializedData::Video { video_url } => response.content(manual_embed(
+                    &u.name,
+                    &self.common,
+                    &[video_url.clone()],
+                    opts.comment.as_deref(),
+                )),
             }
         }
     }

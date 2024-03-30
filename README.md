@@ -15,7 +15,7 @@ See `config/init.json` and `config/runtime.json`
 $ wget https://raw.githubusercontent.com/Clueliss/embedbot-rs/master/Dockerfile  
 $ docker build --tag embedbot-rs .  
 $ docker run -d --name=embedbot \
-    -v ./init.json:/etc/embedbot/init.json:ro \
+    -v ./embedbot.json:/etc/embedbot/embedbot.json:ro \
     -v ./runtime.json:/etc/embedbot/runtime.json \
     embedbot-rs
 ```

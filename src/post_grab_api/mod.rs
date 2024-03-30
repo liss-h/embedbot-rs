@@ -6,8 +6,8 @@ pub mod util;
 
 use serenity::{
     async_trait,
-    builder::{CreateEmbed, CreateInteractionResponseData, CreateMessage},
-    model::{channel::AttachmentType, user::User},
+    builder::{CreateAttachment, CreateEmbed, CreateInteractionResponseMessage, CreateMessage},
+    model::user::User,
 };
 use thiserror::Error;
 use url::Url;
@@ -51,14 +51,29 @@ pub struct EmbedOptions {
     pub ignore_spoiler: bool,
 }
 
-pub enum CreateResponse<'r, 'data> {
+pub enum CreateResponse {
     #[cfg(feature = "implicit-auto-embed")]
-    Message(&'r mut CreateMessage<'data>),
-    Interaction(&'r mut CreateInteractionResponseData<'data>),
+    Message(CreateMessage),
+    Interaction(CreateInteractionResponseMessage),
 }
 
-impl<'a> CreateResponse<'_, 'a> {
-    pub fn content<S: ToString>(self, s: S) -> Self {
+impl CreateResponse {
+    #[cfg(feature = "implicit-auto-embed")]
+    pub fn into_message(self) -> CreateMessage {
+        match self {
+            Self::Message(m) => m,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn into_interaction(self) -> CreateInteractionResponseMessage {
+        match self {
+            Self::Interaction(m) => m,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn content(self, s: impl Into<String>) -> Self {
         match self {
             #[cfg(feature = "implicit-auto-embed")]
             CreateResponse::Message(response) => CreateResponse::Message(response.content(s)),
@@ -66,22 +81,19 @@ impl<'a> CreateResponse<'_, 'a> {
         }
     }
 
-    pub fn embed<F>(self, f: F) -> Self
-    where
-        F: FnOnce(&mut CreateEmbed) -> &mut CreateEmbed,
-    {
+    pub fn embed(self, e: CreateEmbed) -> Self {
         match self {
             #[cfg(feature = "implicit-auto-embed")]
-            CreateResponse::Message(response) => CreateResponse::Message(response.embed(f)),
-            CreateResponse::Interaction(response) => CreateResponse::Interaction(response.embed(f)),
+            CreateResponse::Message(response) => CreateResponse::Message(response.embed(e)),
+            CreateResponse::Interaction(response) => CreateResponse::Interaction(response.embed(e)),
         }
     }
 
-    pub fn add_file<T: Into<AttachmentType<'a>>>(self, file: T) -> Self {
+    pub fn add_file(self, a: CreateAttachment) -> Self {
         match self {
             #[cfg(feature = "implicit-auto-embed")]
-            CreateResponse::Message(response) => CreateResponse::Message(response.add_file(file)),
-            CreateResponse::Interaction(response) => CreateResponse::Interaction(response.add_file(file)),
+            CreateResponse::Message(response) => CreateResponse::Message(response.add_file(a)),
+            CreateResponse::Interaction(response) => CreateResponse::Interaction(response.add_file(a)),
         }
     }
 }
@@ -97,7 +109,7 @@ pub trait PostScraper {
 }
 
 pub trait Post: std::fmt::Debug + Send + Sync {
-    fn create_embed<'data>(&'data self, u: &User, opts: &EmbedOptions, response: CreateResponse<'_, 'data>);
+    fn create_embed<'data>(&'data self, u: &User, opts: &EmbedOptions, response: CreateResponse) -> CreateResponse;
 }
 
 #[async_trait]

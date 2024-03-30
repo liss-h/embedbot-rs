@@ -2,10 +2,7 @@ mod embed_bot;
 mod post_grab_api;
 
 use clap::Parser;
-use embed_bot::{
-    settings::{InitSettings, RuntimeSettings},
-    EmbedBot, SettingsKey,
-};
+use embed_bot::{settings::InitSettings, EmbedBot};
 use serenity::{prelude::GatewayIntents, Client};
 use std::{fs::File, path::PathBuf};
 use tokio::select;
@@ -22,11 +19,8 @@ fn get_gateway_intents() -> GatewayIntents {
 
 #[derive(Parser)]
 struct Opts {
-    #[clap(long, default_value = "/etc/embedbot/init.json")]
+    #[clap(long, default_value = "/etc/embedbot.json")]
     init_conf: PathBuf,
-
-    #[clap(long, default_value = "/etc/embedbot/runtime.json")]
-    runtime_conf: PathBuf,
 }
 
 #[tokio::main]
@@ -42,21 +36,8 @@ async fn main() {
         s
     };
 
-    let runtime_settings = match File::open(&opts.runtime_conf) {
-        Ok(f) => {
-            let s: RuntimeSettings = serde_json::from_reader(f).unwrap();
-            tracing::info!("Loaded runtime settings: {:#?}", s);
-            s
-        },
-        Err(e) => {
-            let s = RuntimeSettings::default();
-            tracing::error!("Unable to open runtime settings (E: {:?}), using defaults: {:#?}", e, s);
-            s
-        },
-    };
-
     let embed_bot = {
-        let mut e = EmbedBot::new(&opts.runtime_conf);
+        let mut e = EmbedBot::new();
 
         if let Some(modules) = init_settings.modules {
             #[cfg(feature = "reddit")]
@@ -85,7 +66,6 @@ async fn main() {
 
     let mut client = Client::builder(&init_settings.discord_token, get_gateway_intents())
         .event_handler(embed_bot)
-        .type_map_insert::<SettingsKey>(runtime_settings)
         .await
         .expect("could not create client");
 

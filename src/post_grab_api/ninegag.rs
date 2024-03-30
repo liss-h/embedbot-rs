@@ -7,7 +7,7 @@ use super::{
 use json_nav::json_nav;
 use reqwest::IntoUrl;
 use serde::{Deserialize, Serialize};
-use serenity::{async_trait, model::user::User};
+use serenity::{async_trait, builder::CreateEmbed, model::user::User};
 use std::collections::HashSet;
 use url::Url;
 
@@ -38,19 +38,20 @@ pub struct Post {
 }
 
 impl PostTrait for Post {
-    fn create_embed<'data>(&'data self, u: &User, opts: &EmbedOptions, response: CreateResponse<'_, 'data>) {
+    fn create_embed<'data>(&'data self, u: &User, opts: &EmbedOptions, response: CreateResponse) -> CreateResponse {
         match self.post_type {
-            NineGagPostType::Image => {
-                response.embed(|e| {
-                    e.title(&self.title).url(&self.src).image(&self.embed_url);
+            NineGagPostType::Image => response.embed({
+                let mut e = CreateEmbed::new()
+                    .title(&self.title)
+                    .url(&self.src)
+                    .image(&self.embed_url);
 
-                    if let Some(comment) = &opts.comment {
-                        include_author_comment(e, u, comment);
-                    }
+                if let Some(comment) = &opts.comment {
+                    e = include_author_comment(e, u, comment);
+                }
 
-                    e
-                });
-            },
+                e
+            }),
             NineGagPostType::Video => {
                 let discord_comment = opts
                     .comment
@@ -65,7 +66,7 @@ impl PostTrait for Post {
                     embed_url = self.embed_url,
                     discord_comment = discord_comment,
                     title = fmt_title(self),
-                ));
+                ))
             },
         }
     }
