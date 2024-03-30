@@ -7,9 +7,6 @@ A discord bot that creates embeds for things discord does not properly embed its
 - SVGs
 - Tweets
 
-## Dependencies
-- rust (nightly) (unstable features: iter_intersperse, pattern)
-
 ## Configuration
 See `config/init.json` and `config/runtime.json`
 

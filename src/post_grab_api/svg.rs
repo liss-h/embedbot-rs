@@ -4,7 +4,8 @@ use super::{wget, CreateResponse, EmbedOptions, Error, Post as PostTrait, PostSc
 use serde::{Deserialize, Serialize};
 use serenity::{async_trait, model::user::User};
 use tempfile::NamedTempFile;
-use tiny_skia::Pixmap;
+use resvg::tiny_skia;
+use resvg::usvg;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ApiSettings {}
@@ -24,12 +25,12 @@ impl Api {
         let res = wget(url.clone()).await?;
         let svg_str = res.text().await?;
 
-        let svg = usvg::Tree::from_str(&svg_str, &usvg::Options::default().to_ref())?;
+        let svg = usvg::Tree::from_str(&svg_str, &usvg::Options::default(), &usvg::fontdb::Database::default())?;
 
-        let size = svg.svg_node().size;
+        let size = svg.size();
 
-        let mut pix = Pixmap::new(size.width() as u32, size.height() as u32).unwrap();
-        resvg::render(&svg, usvg::FitTo::Original, pix.as_mut()).unwrap();
+        let mut pix = tiny_skia::Pixmap::new(size.width() as u32, size.height() as u32).unwrap();
+        resvg::render(&svg, usvg::Transform::identity(), &mut pix.as_mut());
 
         let path = tempfile::Builder::new().suffix(".png").tempfile().unwrap();
 

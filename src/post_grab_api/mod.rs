@@ -37,7 +37,7 @@ pub enum Error {
 
     #[cfg(feature = "svg")]
     #[error("invalid svg")]
-    SvgParse(#[from] usvg::Error),
+    SvgParse(#[from] resvg::usvg::Error),
 
     #[cfg(any(feature = "imgur", feature = "ninegag", feature = "twitter"))]
     #[error("general navigation error: {0}")]
