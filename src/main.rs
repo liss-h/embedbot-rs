@@ -1,5 +1,3 @@
-#![feature(iter_intersperse, pattern)]
-
 mod embed_bot;
 mod post_grab_api;
 

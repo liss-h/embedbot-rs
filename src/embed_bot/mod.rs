@@ -1,6 +1,7 @@
 pub mod settings;
 
 use crate::post_grab_api::{CreateResponse, DynPostScraper, EmbedOptions, Error, Post};
+use itertools::Itertools;
 use serenity::{
     async_trait,
     client::{Context, EventHandler},
@@ -90,7 +91,7 @@ impl EventHandler for EmbedBot {
 
                         let mut urls = urls.into_iter().map(|u| Url::parse(u).unwrap());
 
-                        let comments: String = comments.into_iter().intersperse("\n").collect();
+                        let comments: String = Itertools::intersperse(comments.into_iter(), "\n").collect();
 
                         (urls.next(), Some(comments))
                     },

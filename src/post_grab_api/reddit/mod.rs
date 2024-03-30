@@ -7,6 +7,7 @@ use super::{
     url_path_ends_with_image_extension, wget, wget_json, CreateResponse, EmbedOptions, Error, Post as PostTrait,
     PostScraper, EMBED_TITLE_MAX_LEN,
 };
+use itertools::Itertools;
 use json_nav::json_nav;
 use reqwest::IntoUrl;
 use serde::{Deserialize, Serialize};
@@ -144,7 +145,7 @@ fn manual_embed(author: &str, post: &PostCommonData, embed_urls: &[Url], discord
         })
         .unwrap_or_default();
 
-    let urls = embed_urls.iter().map(Url::as_str).intersperse("\n").collect::<String>();
+    let urls = Itertools::intersperse(embed_urls.iter().map(Url::as_str), "\n").collect::<String>();
 
     format!(
         ">>> **{author}**\nSource: <{src}>\nEmbedURL: {embed_url}\n\n{discord_comment}{reddit_comment}{title}\n\n{text}",

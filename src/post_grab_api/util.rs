@@ -1,10 +1,7 @@
 use super::Error;
 use reqwest::IntoUrl;
 use serenity::{builder::CreateEmbed, model::user::User};
-use std::{
-    borrow::Cow,
-    str::pattern::{Pattern, ReverseSearcher},
-};
+use std::borrow::Cow;
 use url::Url;
 
 const USER_AGENT: &str = "embedbot v0.3";
@@ -26,11 +23,7 @@ pub async fn wget_json<U: IntoUrl>(url: U) -> Result<serde_json::Value, Error> {
     wget(url).await?.json().await.map_err(Into::into)
 }
 
-pub fn url_path_ends_with<'a, P>(haystack: &'a Url, needle: P) -> bool
-where
-    P: Pattern<'a>,
-    <P as Pattern<'a>>::Searcher: ReverseSearcher<'a>,
-{
+pub fn url_path_ends_with(haystack: &Url, needle: &str) -> bool {
     haystack.path().trim_end_matches('/').ends_with(needle)
 }
 

@@ -4,6 +4,7 @@ use super::{
     escape_markdown, include_author_comment, limit_descr_len, CreateResponse, EmbedOptions, Error, Post as PostTrait,
     PostScraper,
 };
+use itertools::Itertools;
 use scraper::Html;
 use serde::{Deserialize, Serialize};
 use serenity::{async_trait, builder::CreateEmbed, model::user::User};
@@ -74,7 +75,7 @@ fn manual_embed(u: &User, post: &PostCommonData, embed_urls: &[Url], discord_com
         .map(|c| format!("**Comment By {author}:**\n{comment}\n\n", author = u.name, comment = c))
         .unwrap_or_default();
 
-    let urls = embed_urls.iter().map(Url::as_str).intersperse("\n").collect::<String>();
+    let urls = Itertools::intersperse(embed_urls.iter().map(Url::as_str), "\n").collect::<String>();
 
     format!(
         ">>> **{author}**\nSource: <{src}>\nEmbedURL: {embed_url}\n\n{discord_comment}{title}\n\n{text}",
