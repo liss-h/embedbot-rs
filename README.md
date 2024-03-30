@@ -1,22 +1,20 @@
 # embedbot-rs
 
 A discord bot that creates embeds for things discord does not properly embed itself. Currently supported:
-- 9GAG posts  
-- Imgur images   
+- 9GAG posts
 - reddit posts
 - SVGs
 - Tweets
 
 ## Configuration
-See `config/init.json` and `config/runtime.json`
+See [embedbot.json](embedbot.json)
 
 ## Docker install
 ```shell
 $ wget https://raw.githubusercontent.com/Clueliss/embedbot-rs/master/Dockerfile  
 $ docker build --tag embedbot-rs .  
 $ docker run -d --name=embedbot \
-    -v ./embedbot.json:/etc/embedbot/embedbot.json:ro \
-    -v ./runtime.json:/etc/embedbot/runtime.json \
+    -v ./embedbot.json:/etc/embedbot.json:ro \
     embedbot-rs
 ```
 
