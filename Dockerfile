@@ -1,4 +1,4 @@
-FROM rustlang/rust:nightly-bullseye-slim AS base
+FROM rust:1-slim-bookworm AS base
 RUN cargo install cargo-chef
 
 
@@ -25,12 +25,11 @@ COPY src src
 RUN cargo build --release
 
 
-FROM debian:bullseye-slim
+FROM debian:bookworm-slim
 
-RUN apt-get update && apt-get install ca-certificates chromium -y
-RUN mkdir /etc/embedbot
+RUN apt-get update && apt-get upgrade && apt-get install ca-certificates chromium -y
 
-COPY ./config/runtime.json /etc/embedbot/runtime.json
+COPY ./embedbot.json /etc/embedbot.json
 COPY --from=builder /usr/local/src/embedbot-rs/target/release/embedbot-rs /usr/local/bin/
 
 RUN chmod +x /usr/local/bin/embedbot-rs
