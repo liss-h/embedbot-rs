@@ -15,33 +15,14 @@ pub use util::*;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("not supposed to embed")]
+    #[error("not supposed to embed: {0:?}")]
     NotSupposedToEmbed(Box<dyn Post>),
 
     #[error("no api available")]
     NoApiAvailable,
 
-    #[cfg(any(feature = "ninegag", feature = "reddit"))]
-    #[error("invalid json")]
-    JsonParse(#[from] serde_json::Error),
-
-    #[cfg(any(feature = "ninegag", feature = "reddit"))]
-    #[error("navigation error: {0}")]
-    JsonNav(#[from] json_nav::JsonNavError),
-
-    #[error("HTTP GET failed")]
-    HttpCommunication(#[from] reqwest::Error),
-
-    #[error("expected url")]
-    UrlParse(#[from] url::ParseError),
-
-    #[cfg(feature = "svg")]
-    #[error("invalid svg")]
-    SvgParse(#[from] resvg::usvg::Error),
-
-    #[cfg(any(feature = "imgur", feature = "ninegag", feature = "twitter"))]
-    #[error("general navigation error: {0}")]
-    Navigation(String),
+    #[error("unable to fetch post: {0}")]
+    PostFetchFailed(#[from] anyhow::Error),
 }
 
 #[derive(Debug, Default)]
@@ -105,11 +86,11 @@ pub trait PostScraper {
     fn is_suitable(&self, url: &Url) -> bool;
     fn should_embed(&self, post: &Self::Output) -> bool;
 
-    async fn get_post(&self, url: Url) -> Result<Self::Output, Error>;
+    async fn get_post(&self, url: Url) -> anyhow::Result<Self::Output>;
 }
 
 pub trait Post: std::fmt::Debug + Send + Sync {
-    fn create_embed<'data>(&'data self, u: &User, opts: &EmbedOptions, response: CreateResponse) -> CreateResponse;
+    fn create_embed(&self, u: &User, opts: &EmbedOptions, response: CreateResponse) -> CreateResponse;
 }
 
 #[async_trait]

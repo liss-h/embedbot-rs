@@ -1,4 +1,4 @@
-pub mod settings;
+mod settings;
 
 use crate::post_grab_api::{CreateResponse, DynPostScraper, EmbedOptions, Error, Post};
 use itertools::Itertools;
@@ -15,6 +15,7 @@ use serenity::{
         gateway::Ready,
     },
 };
+pub use settings::Settings;
 use url::Url;
 
 #[derive(Default)]
@@ -98,7 +99,7 @@ impl EventHandler for EmbedBot {
                         tracing::info!("ignoring {}: not supposed to embed", url);
                     },
                     Err(e) => {
-                        tracing::error!("[Error] while trying to embed {}: {}", url, e);
+                        tracing::error!("error while trying to embed {}: {}", url, e);
                     },
                 }
             }
@@ -190,7 +191,7 @@ impl EventHandler for EmbedBot {
                                 },
                                 Err(e) => {
                                     let msg = format!("{}", e);
-                                    tracing::error!("[Error] {msg}");
+                                    tracing::error!("error: {msg}");
 
                                     command
                                         .create_response(&ctx, CreateInteractionResponse::Message({

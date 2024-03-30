@@ -4,8 +4,8 @@ pub mod module_settings;
 
 use super::{
     escape_markdown, include_author_comment, limit_descr_len, limit_len, url_path_ends_with,
-    url_path_ends_with_image_extension, wget, wget_json, CreateResponse, EmbedOptions, Error, Post as PostTrait,
-    PostScraper, EMBED_TITLE_MAX_LEN,
+    url_path_ends_with_image_extension, wget, wget_json, CreateResponse, EmbedOptions, Post as PostTrait, PostScraper,
+    EMBED_TITLE_MAX_LEN,
 };
 use itertools::Itertools;
 use json_nav::json_nav;
@@ -20,8 +20,13 @@ use serenity::{
 use std::convert::TryInto;
 use url::Url;
 
-async fn find_canonical_post_url<U: IntoUrl>(post_url: U) -> Result<Url, Error> {
-    Ok(wget(post_url).await?.url().clone())
+async fn find_canonical_post_url<U: IntoUrl>(post_url: U) -> anyhow::Result<Url> {
+    let url = post_url.into_url()?;
+
+    match wget(url.clone()).await {
+        Ok(resp) if resp.url().path() != "/over18" => Ok(resp.url().to_owned()),
+        _ => Ok(url),
+    }
 }
 
 fn fmt_title(p: &PostCommonData) -> String {
@@ -58,7 +63,7 @@ fn fmt_title(p: &PostCommonData) -> String {
 
 fn base_embed(e: CreateEmbed, u: &User, comment: Option<&str>, post: &PostCommonData) -> CreateEmbed {
     let mut e = e
-        .title(&fmt_title(post))
+        .title(fmt_title(post))
         .description(limit_descr_len(&escape_markdown(&post.text)))
         .author(CreateEmbedAuthor::new(&u.name))
         .url(post.src.as_str());
@@ -160,7 +165,7 @@ fn manual_embed(author: &str, post: &PostCommonData, embed_urls: &[Url], discord
 }
 
 impl PostTrait for Post {
-    fn create_embed<'data>(&'data self, u: &User, opts: &EmbedOptions, response: CreateResponse) -> CreateResponse {
+    fn create_embed(&self, u: &User, opts: &EmbedOptions, response: CreateResponse) -> CreateResponse {
         if self.common.nsfw && !opts.ignore_nsfw {
             response.embed({
                 let mut e = CreateEmbed::new()
@@ -225,7 +230,7 @@ pub struct Api {
 }
 
 impl Api {
-    fn analyze_post(url: Url, json: &Value) -> Result<Post, Error> {
+    fn analyze_post(url: Url, json: &Value) -> anyhow::Result<Post> {
         let top_level_post = json_nav! {
             json => 0 => "data" => "children" => 0 => "data";
             as object
@@ -284,8 +289,8 @@ impl Api {
 
         // embed_url can be "default" when the original post (referenced by crosspost) is deleted
         let alt_embed_url = json_nav! { top_level_post => "thumbnail"; as str }
-            .map_err(Error::from)
-            .and_then(|s| Url::parse(s).map_err(Error::from));
+            .map_err(anyhow::Error::from)
+            .and_then(|s| Url::parse(s).map_err(anyhow::Error::from));
 
         let specialized_data = match post_json.get("secure_media") {
             Some(Value::Object(sm)) if sm.contains_key("reddit_video") => PostSpecializedData::Video {
@@ -305,11 +310,11 @@ impl Api {
                         .map(|(_key, imgmeta)| {
                             (json_nav! { imgmeta => "s" => "u"; as str })
                                 .map(unescape_url)
-                                .map_err(Error::from)
-                                .and_then(|u| Url::parse(&u).map_err(Error::from))
+                                .map_err(anyhow::Error::from)
+                                .and_then(|u| Url::parse(&u).map_err(anyhow::Error::from))
                         })
                         .collect::<Result<Vec<_>, _>>()
-                        .map_err(|_| Error::JsonNav(json_nav::JsonNavError::TypeMismatch { expected: "url" }))?;
+                        .map_err(|_| json_nav::JsonNavError::TypeMismatch { expected: "url" })?;
 
                     if urls.len() == 1 {
                         PostSpecializedData::Image { img_url: urls.pop().unwrap() }
@@ -333,7 +338,7 @@ impl Api {
         Ok(Post { common: common_data, specialized: specialized_data })
     }
 
-    async fn scrape_post(&self, url: Url) -> Result<Post, Error> {
+    async fn scrape_post(&self, url: Url) -> anyhow::Result<Post> {
         let (url, json) = {
             let mut u = find_canonical_post_url(url).await?;
             u.set_query(None);
@@ -380,7 +385,7 @@ impl PostScraper for Api {
             .contains(&module_settings::PostClassification { content_type, origin_type, nsfw_type })
     }
 
-    async fn get_post(&self, url: Url) -> Result<Self::Output, Error> {
+    async fn get_post(&self, url: Url) -> anyhow::Result<Self::Output> {
         Ok(self.scrape_post(url).await?)
     }
 }

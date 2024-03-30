@@ -1,6 +1,7 @@
 #![cfg(feature = "svg")]
 
-use super::{wget, CreateResponse, EmbedOptions, Error, Post as PostTrait, PostScraper, Url};
+use super::{wget, CreateResponse, EmbedOptions, Post as PostTrait, PostScraper, Url};
+use anyhow::Context;
 use resvg::{tiny_skia, usvg};
 use serde::{Deserialize, Serialize};
 use serenity::{async_trait, builder::CreateAttachment, model::user::User};
@@ -19,7 +20,7 @@ pub struct Post {
 }
 
 impl Api {
-    async fn scrape_post(url: Url) -> Result<Post, Error> {
+    async fn scrape_post(url: Url) -> anyhow::Result<Post> {
         let res = wget(url.clone()).await?;
         let svg_str = res.text().await?;
 
@@ -33,14 +34,15 @@ impl Api {
         let path = tempfile::Builder::new()
             .suffix(".png")
             .tempfile()
-            .unwrap()
+            .context("Unable to create tempfile")?
             .into_temp_path();
 
-        pix.save_png(&path).unwrap();
+        pix.save_png(&path).context("Unable to save PNG")?;
 
-        let file = tokio::fs::File::create(path).await.unwrap();
-        let name = url.path_segments().unwrap().rev().next().unwrap();
-        let attachment = CreateAttachment::file(&file, name).await.unwrap();
+        let file = tokio::fs::File::open(path).await.context("Unable to open tempfile")?;
+        let attachment = CreateAttachment::file(&file, "image.png")
+            .await
+            .context("Unable to read tempfile")?;
 
         Ok(Post { src: url, attachment })
     }
@@ -63,13 +65,13 @@ impl PostScraper for Api {
         true
     }
 
-    async fn get_post(&self, url: Url) -> Result<Self::Output, Error> {
+    async fn get_post(&self, url: Url) -> anyhow::Result<Self::Output> {
         Ok(Self::scrape_post(url).await?)
     }
 }
 
 impl PostTrait for Post {
-    fn create_embed<'data>(&'data self, u: &User, opts: &EmbedOptions, response: CreateResponse) -> CreateResponse {
+    fn create_embed(&self, u: &User, opts: &EmbedOptions, response: CreateResponse) -> CreateResponse {
         let discord_comment = opts
             .comment
             .as_ref()

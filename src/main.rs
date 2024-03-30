@@ -2,7 +2,7 @@ mod embed_bot;
 mod post_grab_api;
 
 use clap::Parser;
-use embed_bot::{settings::InitSettings, EmbedBot};
+use embed_bot::{EmbedBot, Settings};
 use serenity::{prelude::GatewayIntents, Client};
 use std::{fs::File, path::PathBuf};
 use tokio::select;
@@ -20,7 +20,7 @@ fn get_gateway_intents() -> GatewayIntents {
 #[derive(Parser)]
 struct Opts {
     #[clap(long, default_value = "/etc/embedbot.json")]
-    init_conf: PathBuf,
+    config_path: PathBuf,
 }
 
 #[tokio::main]
@@ -29,17 +29,17 @@ async fn main() {
 
     let opts = Opts::parse();
 
-    let init_settings = {
-        let f = File::open(opts.init_conf).expect("access to init settings file");
-        let s: InitSettings = serde_json::from_reader(f).unwrap();
-        tracing::info!("Loaded init settings: {:#?}", s);
+    let settings = {
+        let f = File::open(opts.config_path).expect("access to config file");
+        let s: Settings = serde_json::from_reader(f).unwrap();
+        tracing::info!("Loaded config: {:#?}", s);
         s
     };
 
     let embed_bot = {
         let mut e = EmbedBot::new();
 
-        if let Some(modules) = init_settings.modules {
+        if let Some(modules) = settings.modules {
             #[cfg(feature = "reddit")]
             if let Some(settings) = modules.reddit {
                 e.register_api(post_grab_api::reddit::Api { settings });
@@ -64,15 +64,14 @@ async fn main() {
         e
     };
 
-    let mut client = Client::builder(&init_settings.discord_token, get_gateway_intents())
+    let mut client = Client::builder(&settings.discord_token, get_gateway_intents())
         .event_handler(embed_bot)
         .await
         .expect("could not create client");
 
     select! {
-        res = client.start() => match res {
-            Err(e) => tracing::error!("Client Err: {:?}", e),
-            Ok(_) => {},
+        res = client.start() => if let Err(e) = res {
+            tracing::error!("Client error: {:?}", e)
         },
         _ = tokio::signal::ctrl_c() => {}
     }

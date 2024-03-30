@@ -1,10 +1,20 @@
 use crate::post_grab_api;
 use serde::{Deserialize, Serialize};
+use std::fmt::{Debug, Formatter};
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct InitSettings {
+#[derive(Serialize, Deserialize)]
+pub struct Settings {
     pub discord_token: String,
     pub modules: Option<Modules>,
+}
+
+impl Debug for Settings {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Settings")
+            .field("discord_token", &"[REDACTED]")
+            .field("modules", &self.modules)
+            .finish()
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]

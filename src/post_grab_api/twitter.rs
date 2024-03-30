@@ -1,9 +1,10 @@
 #![cfg(feature = "twitter")]
 
 use super::{
-    escape_markdown, include_author_comment, limit_descr_len, CreateResponse, EmbedOptions, Error, Post as PostTrait,
+    escape_markdown, include_author_comment, limit_descr_len, CreateResponse, EmbedOptions, Post as PostTrait,
     PostScraper,
 };
+use headless_chrome::LaunchOptions;
 use itertools::Itertools;
 use scraper::Html;
 use serde::{Deserialize, Serialize};
@@ -12,25 +13,28 @@ use serenity::{
     builder::{CreateEmbed, CreateEmbedAuthor, CreateEmbedFooter},
     model::user::User,
 };
-use std::collections::HashSet;
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+};
 use url::Url;
 
 fn fmt_title(p: &PostCommonData) -> String {
     format!("@{author} - **twitter.com**", author = p.author)
 }
 
-fn wget_rendered_html(url: &Url) -> Result<Html, Error> {
-    // headless_chrome does not export its error type
-    fn conv<T, E: ToString>(r: Result<T, E>) -> Result<T, Error> {
-        r.map_err(|e| Error::Navigation(e.to_string()))
-    }
+fn wget_rendered_html(url: &Url, chrome_executable: Option<&Path>) -> anyhow::Result<Html> {
+    let browser = headless_chrome::Browser::new(
+        LaunchOptions::default_builder()
+            .path(chrome_executable.map(ToOwned::to_owned))
+            .build()
+            .unwrap(),
+    )?;
 
-    let browser = conv(headless_chrome::Browser::default())?;
-
-    let tab = conv(browser.new_tab())?;
-    conv(tab.navigate_to(url.as_str()))?;
-    conv(tab.wait_until_navigated())?;
-    let content = conv(tab.get_content())?;
+    let tab = browser.new_tab()?;
+    tab.navigate_to(url.as_str())?;
+    tab.wait_until_navigated()?;
+    let content = tab.get_content()?;
 
     Ok(Html::parse_document(&content))
 }
@@ -88,7 +92,7 @@ fn manual_embed(u: &User, post: &PostCommonData, embed_urls: &[Url], discord_com
 }
 
 impl PostTrait for Post {
-    fn create_embed<'data>(&'data self, u: &User, opts: &EmbedOptions, response: CreateResponse) -> CreateResponse {
+    fn create_embed(&self, u: &User, opts: &EmbedOptions, response: CreateResponse) -> CreateResponse {
         match &self.specialized {
             PostSpecializedData::Text => {
                 response.embed(base_embed(CreateEmbed::new(), u, opts.comment.as_deref(), &self.common))
@@ -97,7 +101,7 @@ impl PostTrait for Post {
                 base_embed(CreateEmbed::new(), u, opts.comment.as_deref(), &self.common).image(img_src[0].as_str()),
             ),
             PostSpecializedData::Image { img_src } => {
-                response.content(manual_embed(u, &self.common, &img_src, opts.comment.as_deref()))
+                response.content(manual_embed(u, &self.common, img_src, opts.comment.as_deref()))
             },
             PostSpecializedData::Video { video_src } => response.content(manual_embed(
                 u,
@@ -109,7 +113,7 @@ impl PostTrait for Post {
                 base_embed(CreateEmbed::new(), u, opts.comment.as_deref(), &self.common)
                     .image(thumbnail_src.as_str())
                     .footer(CreateEmbedFooter::new(
-                        "This was originally a video. Click to watch on twitter.",
+                        "This was originally a video. Click title to watch on twitter.",
                     )),
             ),
         }
@@ -125,6 +129,7 @@ pub enum SettingsPostType {
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct ApiSettings {
+    pub chrome_executable: Option<PathBuf>,
     pub embed_set: HashSet<SettingsPostType>,
 }
 
@@ -148,16 +153,18 @@ impl PostScraper for Api {
         })
     }
 
-    async fn get_post(&self, url: Url) -> Result<Self::Output, Error> {
+    async fn get_post(&self, url: Url) -> anyhow::Result<Self::Output> {
+        let chrome_exec = self.settings.chrome_executable.clone();
+
         tokio::task::spawn_blocking(move || {
             let author = url
                 .path_segments()
-                .ok_or_else(|| Error::Navigation("Url missing path".to_owned()))?
+                .ok_or_else(|| anyhow::anyhow!("Url missing path"))?
                 .next()
-                .ok_or_else(|| Error::Navigation("Url missing first path element".to_owned()))?
+                .ok_or_else(|| anyhow::anyhow!("Url missing first path element"))?
                 .to_owned();
 
-            let html = wget_rendered_html(&url)?;
+            let html = wget_rendered_html(&url, chrome_exec.as_deref())?;
 
             let text = {
                 let selector = scraper::Selector::parse(r#"article div[data-testid="tweetText"]"#).unwrap();
@@ -176,7 +183,7 @@ impl PostScraper for Api {
                 html.select(&selector)
                     .filter_map(|e| e.attr("src"))
                     .filter(|src| src.starts_with("https://pbs.twimg.com/media"))
-                    .filter_map(|s| Url::parse(&s).ok())
+                    .filter_map(|s| Url::parse(s).ok())
                     .collect()
             };
 

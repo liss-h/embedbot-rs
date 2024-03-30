@@ -1,15 +1,14 @@
-use super::Error;
 use reqwest::IntoUrl;
 use serenity::{builder::CreateEmbed, model::user::User};
 use std::borrow::Cow;
 use url::Url;
 
-const USER_AGENT: &str = "embedbot v0.3";
+const USER_AGENT: &str = concat!("github.com/Clueliss/embedbot-rs embedbot/", clap::crate_version!());
 const EMBED_CONTENT_MAX_LEN: usize = 2048;
 
 pub const EMBED_TITLE_MAX_LEN: usize = 256;
 
-pub async fn wget<U: IntoUrl>(url: U) -> Result<reqwest::Response, Error> {
+pub async fn wget<U: IntoUrl>(url: U) -> anyhow::Result<reqwest::Response> {
     let client = reqwest::Client::new();
     client
         .get(url)
@@ -19,7 +18,7 @@ pub async fn wget<U: IntoUrl>(url: U) -> Result<reqwest::Response, Error> {
         .map_err(Into::into)
 }
 
-pub async fn wget_json<U: IntoUrl>(url: U) -> Result<serde_json::Value, Error> {
+pub async fn wget_json<U: IntoUrl>(url: U) -> anyhow::Result<serde_json::Value> {
     wget(url).await?.json().await.map_err(Into::into)
 }
 
@@ -37,31 +36,26 @@ pub fn url_path_ends_with_image_extension(haystack: &Url) -> bool {
     EXTENSIONS.iter().any(|x| s.ends_with(x))
 }
 
+v_escape::new!(
+    MarkdownEscape;
+    '`' -> "\\`",
+    '*' -> "\\*",
+    '_' -> "\\_",
+    '{' -> "\\{",
+    '}' -> "\\}",
+    '[' -> "\\[",
+    ']' -> "\\]",
+    '(' -> "\\(",
+    ')' -> "\\)",
+    '#' -> "\\#",
+    '+' -> "\\+",
+    '-' -> "\\-",
+    '.' -> "\\.",
+    '!' -> "\\!"
+);
+
 pub fn escape_markdown(title: &str) -> String {
-    const REPLACEMENTS: [(&str, &str); 14] = [
-        ("`", "\\`"),
-        ("*", "\\*"),
-        ("_", "\\_"),
-        ("{", "\\{"),
-        ("}", "\\}"),
-        ("[", "\\["),
-        ("]", "\\]"),
-        ("(", "\\("),
-        (")", "\\)"),
-        ("#", "\\#"),
-        ("+", "\\+"),
-        ("-", "\\-"),
-        (".", "\\."),
-        ("!", "\\!"),
-    ];
-
-    let mut buf = String::from(title);
-
-    for (orig, new) in &REPLACEMENTS {
-        buf = buf.replace(orig, new);
-    }
-
-    buf
+    MarkdownEscape::new(title.as_bytes()).to_string()
 }
 
 pub fn limit_len(text: &str, limit: usize) -> Cow<str> {

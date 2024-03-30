@@ -13,12 +13,7 @@
                     "content_type": "Text"
                 },
                 {
-                    "content_type": "Video",
-                    "origin_type": "Crossposted"
-                },
-                {
-                    "content_type": "Video",
-                    "nsfw_type": "Nsfw"
+                    "content_type": "Video"
                 }
             ]
         },
@@ -30,9 +25,7 @@
         "svg": {},
         "twitter": {
             "embed_set": [
-                "Image",
-                "Video",
-                "Text"
+                "Video"
             ]
         }
     }
