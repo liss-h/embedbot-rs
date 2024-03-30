@@ -1,4 +1,5 @@
 FROM rust:1-slim-bookworm AS base
+RUN apt-get update && apt-get upgrade
 RUN cargo install cargo-chef
 
 
