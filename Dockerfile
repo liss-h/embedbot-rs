@@ -1,9 +1,12 @@
 FROM rust:1-slim-bookworm AS base
+
+ENV DEBIAN_FRONTEND=noninteractive
+
 RUN apt-get update && apt-get upgrade
 RUN cargo install cargo-chef
 
 
-FROM base as planner
+FROM base AS planner
 
 WORKDIR /usr/local/src/embedbot-rs
 COPY Cargo.toml Cargo.toml
@@ -13,7 +16,7 @@ COPY src src
 RUN cargo chef prepare --recipe-path recipe.json
 
 
-FROM base as builder
+FROM base AS builder
 
 WORKDIR /usr/local/src/embedbot-rs
 
@@ -27,6 +30,8 @@ RUN cargo build --release
 
 
 FROM debian:bookworm-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get upgrade && apt-get install ca-certificates chromium -y
 
