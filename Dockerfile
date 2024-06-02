@@ -2,7 +2,7 @@ FROM rust:1-slim-bookworm AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get upgrade
+RUN apt-get update && apt-get upgrade -y
 RUN cargo install cargo-chef
 
 
@@ -33,7 +33,7 @@ FROM debian:bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get upgrade && apt-get install ca-certificates chromium -y
+RUN apt-get update && apt-get upgrade -y && apt-get install ca-certificates chromium -y
 
 COPY ./embedbot.json /etc/embedbot.json
 COPY --from=builder /usr/local/src/embedbot-rs/target/release/embedbot-rs /usr/local/bin/
