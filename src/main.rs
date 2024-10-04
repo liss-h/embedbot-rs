@@ -42,22 +42,22 @@ async fn main() {
         if let Some(modules) = settings.modules {
             #[cfg(feature = "reddit")]
             if let Some(settings) = modules.reddit {
-                e.register_api(post_grab_api::reddit::Api { settings });
+                e.register_api(post_grab_api::reddit::Api::from_settings(settings));
             }
 
             #[cfg(feature = "ninegag")]
             if let Some(settings) = modules.ninegag {
-                e.register_api(post_grab_api::ninegag::Api { settings });
+                e.register_api(post_grab_api::ninegag::Api::from_settings(settings));
             }
 
             #[cfg(feature = "svg")]
             if let Some(settings) = modules.svg {
-                e.register_api(post_grab_api::svg::Api { settings });
+                e.register_api(post_grab_api::svg::Api::from_settings(settings));
             }
 
             #[cfg(feature = "twitter")]
             if let Some(settings) = modules.twitter {
-                e.register_api(post_grab_api::twitter::Api { settings });
+                e.register_api(post_grab_api::twitter::Api::from_settings(settings));
             }
         }
 
@@ -71,8 +71,9 @@ async fn main() {
 
     select! {
         res = client.start() => if let Err(e) = res {
-            tracing::error!("Client error: {:?}", e)
+            tracing::error!("Client error: {:?}", e);
         },
-        _ = tokio::signal::ctrl_c() => {}
+        _ = tokio::signal::ctrl_c() => {
+        },
     }
 }

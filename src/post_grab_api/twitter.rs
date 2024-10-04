@@ -134,7 +134,13 @@ pub struct ApiSettings {
 }
 
 pub struct Api {
-    pub settings: ApiSettings,
+    settings: ApiSettings,
+}
+
+impl Api {
+    pub fn from_settings(settings: ApiSettings) -> Self {
+        Self { settings }
+    }
 }
 
 #[async_trait]

@@ -7,10 +7,14 @@ use serde::{Deserialize, Serialize};
 use serenity::{async_trait, builder::CreateAttachment, model::user::User};
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ApiSettings {}
+pub struct ApiSettings;
 
-pub struct Api {
-    pub settings: ApiSettings,
+pub struct Api;
+
+impl Api {
+    pub fn from_settings(_s: ApiSettings) -> Self {
+        Self
+    }
 }
 
 #[derive(Debug)]

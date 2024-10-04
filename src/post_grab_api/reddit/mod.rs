@@ -64,7 +64,7 @@ fn fmt_title(p: &PostCommonData) -> String {
 fn base_embed(e: CreateEmbed, u: &User, comment: Option<&str>, post: &PostCommonData) -> CreateEmbed {
     let mut e = e
         .title(fmt_title(post))
-        .description(limit_descr_len(&escape_markdown(&post.text)))
+        .description(limit_descr_len(&post.text))
         .author(CreateEmbedAuthor::new(&u.name))
         .url(post.src.as_str());
 
@@ -158,7 +158,7 @@ fn manual_embed(author: &str, post: &PostCommonData, embed_urls: &[Url], discord
         src = &post.src,
         embed_url = urls,
         title = fmt_title(post),
-        text = limit_descr_len(&escape_markdown(&post.text)),
+        text = limit_descr_len(&post.text),
         discord_comment = discord_comment,
         reddit_comment = reddit_comment,
     )
@@ -226,10 +226,14 @@ pub struct ApiSettings {
 }
 
 pub struct Api {
-    pub settings: ApiSettings,
+    settings: ApiSettings,
 }
 
 impl Api {
+    pub fn from_settings(settings: ApiSettings) -> Self {
+        Self { settings }
+    }
+
     fn analyze_post(url: Url, json: &Value) -> anyhow::Result<Post> {
         let top_level_post = json_nav! {
             json => 0 => "data" => "children" => 0 => "data";
